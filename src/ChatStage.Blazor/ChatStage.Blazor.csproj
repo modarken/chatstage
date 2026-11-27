@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <RootNamespace>ChatStage</RootNamespace>
+    <Description>A drop-in AI chat UI for Blazor, WPF and MAUI: Bit.BlazorUI.AI components talking AG-UI to an agent, with your own Razor components inside the chat.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AGUI.Client" />
+    <PackageReference Include="Bit.BlazorUI" />
+    <PackageReference Include="Bit.BlazorUI.AI" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ChatStage.Blazor.Tests" />
+  </ItemGroup>
+
+</Project>

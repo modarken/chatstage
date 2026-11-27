@@ -1,0 +1,42 @@
+<Project>
+
+  <!-- Settings for every project in the repository. -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <Deterministic>true</Deterministic>
+    <!-- Reproducible paths and SourceLink URLs when built by CI. -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Package metadata, used by the packable projects under src/. -->
+  <PropertyGroup>
+    <Authors>modarken</Authors>
+    <Company>modarken</Company>
+    <Product>ChatStage</Product>
+    <Copyright>Copyright (c) modarken and contributors</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/modarken/chatstage</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/modarken/chatstage</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>ai;chat;blazor;ag-ui;agent-framework;wpf;maui</PackageTags>
+  </PropertyGroup>
+
+  <!-- Versions come from git tags (v1.2.3) through MinVer. -->
+  <PropertyGroup>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MinVer" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

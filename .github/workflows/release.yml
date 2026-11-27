@@ -1,0 +1,61 @@
+name: Release
+
+# Runs when a version tag (v1.2.3, v1.2.3-preview.1) is pushed: builds, tests, packs, publishes to nuget.org through
+# NuGet Trusted Publishing (no stored API key), and creates the GitHub Release.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  release:
+    name: Publish
+    runs-on: ubuntu-latest
+    environment: nuget
+    permissions:
+      contents: write # create the GitHub Release
+      id-token: write # NuGet Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # MinVer reads the version from git tags
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build --configuration Release
+
+      - name: Test
+        run: dotnet test --no-build --configuration Release
+
+      - name: Pack
+        run: |
+          dotnet pack src/ChatStage.Blazor --no-build --configuration Release --output artifacts
+          dotnet pack src/ChatStage.Server --no-build --configuration Release --output artifacts
+
+      - name: Log in to nuget.org (Trusted Publishing)
+        id: nuget
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Publish to nuget.org
+        run: dotnet nuget push "artifacts/*.nupkg" --api-key "${{ steps.nuget.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          prerelease=""
+          if [[ "$TAG" == *-* ]]; then prerelease="--prerelease"; fi
+          gh release create "$TAG" artifacts/*.nupkg artifacts/*.snupkg --title "$TAG" --generate-notes --verify-tag $prerelease

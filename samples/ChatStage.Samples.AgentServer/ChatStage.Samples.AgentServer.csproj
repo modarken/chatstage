@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!-- MAAI001: the Agent Framework's session store API is marked experimental. -->
+    <NoWarn>$(NoWarn);MAAI001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/ChatStage.Server/ChatStage.Server.csproj" />
+  </ItemGroup>
+
+</Project>

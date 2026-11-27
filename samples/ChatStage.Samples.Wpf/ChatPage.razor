@@ -1,0 +1,23 @@
+@inject BitThemeManager Theme
+
+<ChatStageChat Title="ChatStage sample"
+               EmptyTitle="Ask the demo agent"
+               Suggestions="_suggestions"
+               Placeholder="Try: what time is it / delete the demo item / find a listing">
+    <HeaderContent>
+        <button class="theme-toggle" @onclick="ToggleThemeAsync">@(_dark ? "Light" : "Dark")</button>
+    </HeaderContent>
+</ChatStageChat>
+
+@code {
+    private readonly IReadOnlyList<string> _suggestions = ["Show me markdown", "What time is it?", "Delete the demo item", "Find a listing"];
+    private bool _dark = true;
+
+    protected override async Task OnInitializedAsync() => await Theme.SetThemeAsync(BitThemeName.FluentDark);
+
+    private async Task ToggleThemeAsync()
+    {
+        _dark = !_dark;
+        await Theme.SetThemeAsync(_dark ? BitThemeName.FluentDark : BitThemeName.FluentLight);
+    }
+}

@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/ChatStage.Samples.AgentServer/ChatStage.Samples.AgentServer.csproj" />
+    <Project Path="samples/ChatStage.Samples.Wpf/ChatStage.Samples.Wpf.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/ChatStage.Blazor/ChatStage.Blazor.csproj" />
+    <Project Path="src/ChatStage.Server/ChatStage.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ChatStage.Blazor.Tests/ChatStage.Blazor.Tests.csproj" />
+    <Project Path="tests/ChatStage.IntegrationTests/ChatStage.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

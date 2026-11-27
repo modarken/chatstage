@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>ChatStage.Server</RootNamespace>
+    <Description>The server side of ChatStage: serves a Microsoft Agent Framework agent over AG-UI with each thread kept, and binds tool approvals to the calls the agent actually asked about.</Description>
+    <!-- MAAI001: the Agent Framework's session store API is marked experimental. -->
+    <NoWarn>$(NoWarn);MAAI001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting.AGUI.AspNetCore" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+  </ItemGroup>
+
+</Project>

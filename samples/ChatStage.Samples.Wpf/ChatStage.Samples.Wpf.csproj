@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- BlazorWebView's WebView2 control needs a versioned Windows TFM (plain net11.0-windows fails at run time). -->
+    <TargetFramework>net11.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- Lets CI on Linux build this project too. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <RootNamespace>ChatStage.Samples.Wpf</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/ChatStage.Blazor/ChatStage.Blazor.csproj" />
+  </ItemGroup>
+
+</Project>

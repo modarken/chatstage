@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/ChatStage.Blazor/ChatStage.Blazor.csproj" />
+  </ItemGroup>
+
+</Project>

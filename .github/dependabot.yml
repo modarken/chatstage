@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      agent-framework:
+        patterns: ["Microsoft.Agents.*", "AGUI.*", "Microsoft.Extensions.AI*"]
+      bit:
+        patterns: ["Bit.*"]
+      dotnet:
+        patterns: ["Microsoft.AspNetCore.*", "Microsoft.Extensions.*"]
+        exclude-patterns: ["Microsoft.Extensions.AI*"]
+      test:
+        patterns: ["xunit*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

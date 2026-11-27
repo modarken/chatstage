@@ -1,0 +1,57 @@
+@* The app's own component, shown in the chat for the find_listing tool. *@
+@inherits ChatStageComponent<ListingCard.Listing>
+@implements IDisposable
+
+@if (Data is null)
+{
+    <div class="listing-card pending">@(ToolCall?.Status == BitAiToolCallStatus.Failed ? "Couldn't search listings." : "Searching listings…")</div>
+}
+else
+{
+    <div class="listing-card" data-testid="listing-card">
+        <div class="body">
+            <div class="title">@Data.Title</div>
+            <div class="price">@Data.Price.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) @Data.Currency</div>
+            <div class="id">@Data.Id</div>
+        </div>
+        <button class="watch" disabled="@(!Chat.CanSend || _state != WatchState.Idle)" @onclick="WatchAsync" data-testid="listing-watch">
+            @(_state switch
+            {
+                WatchState.Queued => "Will send when the reply ends…",
+                WatchState.Sent => "Watching",
+                _ => "Watch",
+            })
+        </button>
+    </div>
+}
+
+@code {
+    /// <summary>The find_listing tool's result.</summary>
+    public sealed record Listing(string Id, string Title, decimal Price, string Currency);
+
+    private enum WatchState { Idle, Queued, Sent }
+
+    private WatchState _state;
+
+    protected override void OnInitialized() => Chat.Changed += OnChatChanged;
+
+    private async Task WatchAsync()
+    {
+        // While the agent is still writing its reply, the message is queued and sent when the reply ends.
+        _state = Chat.IsBusy ? WatchState.Queued : WatchState.Sent;
+        var reply = await Chat.SendAsync($"watch {Data!.Id} ({Data.Title})");
+        _state = reply is null ? WatchState.Idle : WatchState.Sent;
+    }
+
+    private void OnChatChanged()
+    {
+        if (_state == WatchState.Queued && !Chat.IsBusy)
+        {
+            _state = WatchState.Sent;
+        }
+
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => Chat.Changed -= OnChatChanged;
+}

@@ -1,0 +1,38 @@
+<Project>
+
+  <!-- Central package management: every version is pinned exactly, here and only here. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Build">
+    <PackageVersion Include="MinVer" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Library">
+    <!--
+      Bit.BlazorUI is a prerelease series that moves fast; it is pinned to one exact build ([x] range, so apps get exactly this build too) and wrapped by ChatStage.
+      Update it deliberately, run the tests and the sample, and note the change in CHANGELOG.md.
+    -->
+    <PackageVersion Include="Bit.BlazorUI" Version="[11.0.0-pre-25]" />
+    <PackageVersion Include="Bit.BlazorUI.AI" Version="[11.0.0-pre-25]" />
+    <PackageVersion Include="AGUI.Client" Version="1.0.1" />
+    <PackageVersion Include="AGUI.Abstractions" Version="1.0.1" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="11.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="11.0.1" />
+    <PackageVersion Include="Microsoft.Agents.AI" Version="1.28.0" />
+    <!-- Preview: the Agent Framework's AG-UI hosting. -->
+    <PackageVersion Include="Microsoft.Agents.AI.Hosting.AGUI.AspNetCore" Version="1.28.0-preview.261106.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests and samples">
+    <PackageVersion Include="xunit.v3" Version="4.0.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="11.0.10" />
+  </ItemGroup>
+
+</Project>

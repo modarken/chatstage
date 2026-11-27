@@ -1,0 +1,31 @@
+.chatstage {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    background: var(--bit-clr-bg-pri);
+    color: var(--bit-clr-fg-pri);
+}
+
+.chatstage-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--bit-clr-brd-sec);
+}
+
+.chatstage-title {
+    flex: 1;
+    font-weight: 600;
+}
+
+.chatstage-usage {
+    font-size: 0.85em;
+    opacity: 0.75;
+}
+
+.chatstage ::deep > :last-child {
+    flex: 1;
+    min-height: 0;
+}
