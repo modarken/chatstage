@@ -18,6 +18,8 @@ services.AddChatStage(o => o.Endpoint = new Uri("https://localhost:5001/agent"))
 - Streaming Markdown, tool cards, approvals (Allow / Decline), a context meter and token usage.
 - Your own Razor components inside the chat, for tool results and AG-UI `CUSTOM` events, with a way to talk back to the agent.
 - Messages a component sends while the agent is replying are queued, not dropped.
+- `ShowAsync` shows your own component in the transcript from app code, with no agent run; it is never sent to the agent.
+- A failed run shows the AG-UI `RUN_ERROR` message, so any server can tell the user what went wrong.
 
 Bit.BlazorUI is a prerelease series; this package pins one exact build of it.
 

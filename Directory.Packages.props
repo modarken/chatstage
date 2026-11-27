@@ -19,6 +19,7 @@
     <PackageVersion Include="Bit.BlazorUI.AI" Version="[11.0.0-pre-25]" />
     <PackageVersion Include="AGUI.Client" Version="1.0.1" />
     <PackageVersion Include="AGUI.Abstractions" Version="1.0.1" />
+    <PackageVersion Include="AGUI.Server" Version="1.0.1" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="11.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="11.0.0" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="11.0.1" />

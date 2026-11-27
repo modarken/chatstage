@@ -1,19 +1,26 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Bit.BlazorUI;
 
 namespace ChatStage;
 
 /// <summary>
-/// Lets a component inside the chat talk back to the agent. A message sent while the agent is still replying is
-/// queued and sent, in order, as soon as the reply ends, so a click is never silently dropped; <see cref="IsBusy"/> and
-/// <see cref="QueuedCount"/> let the component show that it is waiting.
+/// Lets a component inside the chat, or app code around it, talk back to the agent (<see cref="SendAsync"/>) or show one
+/// of its own components in the transcript without the agent (<see cref="ShowAsync{TData}"/>). A message sent while the
+/// agent is still replying is queued and sent, in order, as soon as the reply ends, so a click is never silently dropped;
+/// <see cref="IsBusy"/> and <see cref="QueuedCount"/> let the component show that it is waiting.
 /// </summary>
 public sealed class ChatStageActions
 {
     private static readonly ConditionalWeakTable<BitAiChatSession, ChatStageActions> Instances = [];
     private static readonly ChatStageActions Detached = new(null);
+    private static readonly JsonSerializerOptions DefaultJson = new(JsonSerializerDefaults.Web);
+
+    /// <summary>The <see cref="BitAiMessage.Extensions"/> key that marks a message the app showed.</summary>
+    internal const string AppMessageExtension = "chatstage.appMessage";
 
     private readonly BitAiChatSession? _session;
+    private ChatStageComponentRegistry? _components;
     private readonly Lock _gate = new();
     private readonly LinkedList<Queued> _queue = [];
     private bool _pumping;
@@ -57,6 +64,73 @@ public sealed class ChatStageActions
         session is null ? Detached : Instances.GetValue(session, static s => new ChatStageActions(s));
 
     /// <summary>
+    /// Whether <paramref name="message"/> was shown by the app with <see cref="ShowAsync{TData}"/>. Such a message is
+    /// only in the transcript: it is never sent to the agent.
+    /// </summary>
+    /// <param name="message">A message of the conversation.</param>
+    /// <returns><see langword="true"/> for a message the app showed.</returns>
+    public static bool IsAppMessage(IBitAiMessage message) =>
+        message is BitAiMessage { Extensions: var extensions } && extensions.ContainsKey(AppMessageExtension);
+
+    /// <summary>The actions for a session, using <paramref name="components"/> to check and serialize what <see cref="ShowAsync{TData}"/> shows.</summary>
+    internal static ChatStageActions For(BitAiChatSession? session, ChatStageComponentRegistry components)
+    {
+        var actions = For(session);
+        if (actions._session is not null)
+        {
+            actions._components = components;
+        }
+
+        return actions;
+    }
+
+    /// <summary>
+    /// Shows the component registered for <paramref name="eventName"/> (with
+    /// <see cref="ChatStageBuilder.AddEventComponent{TComponent, TData}(string)"/>) in the transcript, with
+    /// <paramref name="data"/>, as an assistant message from the app rather than the agent: for example a "View matches"
+    /// button that shows matching listings as cards. No run is started, and the message is never sent to the agent, as
+    /// history or otherwise.
+    /// </summary>
+    /// <remarks>
+    /// Like <see cref="SendAsync"/>, it waits while the agent is replying and keeps its place among queued messages, so it
+    /// never lands inside a reply. <paramref name="data"/> is serialized with <see cref="ChatStageBuilder.ConfigureJson"/>'s
+    /// options, as the agent's own event values are read, so the message can be saved with the conversation.
+    /// </remarks>
+    /// <typeparam name="TData">The component's data type.</typeparam>
+    /// <param name="eventName">The name the component is registered under, for example <c>acme:listings</c>.</param>
+    /// <param name="data">The component's data.</param>
+    /// <param name="text">Text shown above the component, or <see langword="null"/> for none.</param>
+    /// <param name="cancellationToken">Takes a message that is still queued out of the queue.</param>
+    /// <returns>The message once it is in the transcript, or <see langword="null"/> when the session ended first.</returns>
+    /// <exception cref="InvalidOperationException">The chat has no session (<see cref="CanSend"/> is false).</exception>
+    /// <exception cref="ArgumentException">No component is registered for <paramref name="eventName"/>.</exception>
+    public Task<BitAiMessage?> ShowAsync<TData>(string eventName, TData data, string? text = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(eventName);
+        if (_session is null)
+        {
+            throw new InvalidOperationException("This chat is shown without a session, so it can't show messages.");
+        }
+
+        var components = _components;
+        if (components is not null && !components.HasEvent(eventName))
+        {
+            throw new ArgumentException($"No component is registered for '{eventName}'. Register one with {nameof(ChatStageBuilder.AddEventComponent)}.", nameof(eventName));
+        }
+
+        var value = JsonSerializer.SerializeToElement(data, components?.Json ?? DefaultJson);
+        var message = new BitAiMessage(BitAiRole.Assistant);
+        message.Extensions[AppMessageExtension] = true;
+        if (!string.IsNullOrEmpty(text))
+        {
+            message.AddPart(new BitAiTextPart(text));
+        }
+
+        message.AddPart(new BitAiStructuredDataPart(value, eventName));
+        return Enqueue(new Queued(text: null, message), cancellationToken);
+    }
+
+    /// <summary>
     /// Sends <paramref name="text"/> to the agent as a user message: now when the agent is idle, otherwise as soon as its
     /// current reply ends (messages keep their order).
     /// </summary>
@@ -72,7 +146,11 @@ public sealed class ChatStageActions
             throw new InvalidOperationException("This chat is shown without a session, so it can't send messages.");
         }
 
-        var item = new Queued(text);
+        return Enqueue(new Queued(text, message: null), cancellationToken);
+    }
+
+    private Task<BitAiMessage?> Enqueue(Queued item, CancellationToken cancellationToken)
+    {
         lock (_gate)
         {
             _queue.AddLast(item);
@@ -138,10 +216,17 @@ public sealed class ChatStageActions
 
                 await next.Registration.DisposeAsync().ConfigureAwait(false);
                 RaiseChanged();
+                if (next.Message is { } shown)
+                {
+                    _session.Conversation.AddMessage(shown);
+                    next.Completion.TrySetResult(shown);
+                    continue;
+                }
+
                 BitAiMessage? reply;
                 try
                 {
-                    reply = await _session.SubmitAsync(next.Text, null, CancellationToken.None).ConfigureAwait(false);
+                    reply = await _session.SubmitAsync(next.Text!, null, CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (ObjectDisposedException)
                 {
@@ -186,9 +271,12 @@ public sealed class ChatStageActions
 
     private void RaiseChanged() => Changed?.Invoke();
 
-    private sealed class Queued(string text)
+    /// <summary>A queued message: text to send to the agent, or a message the app shows.</summary>
+    private sealed class Queued(string? text, BitAiMessage? message)
     {
-        public string Text { get; } = text;
+        public string? Text { get; } = text;
+
+        public BitAiMessage? Message { get; } = message;
 
         public TaskCompletionSource<BitAiMessage?> Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 

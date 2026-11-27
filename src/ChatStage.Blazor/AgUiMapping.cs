@@ -17,11 +17,14 @@ internal static class AgUiMapping
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
-    /// <summary>The messages after the last assistant message: what a server that keeps the history hasn't seen yet.</summary>
+    /// <summary>
+    /// The user messages after the agent's last reply: what a server that keeps the history hasn't seen yet. Messages the
+    /// app showed (<see cref="ChatStageActions.ShowAsync{TData}"/>) are not replies, and are never sent.
+    /// </summary>
     public static IEnumerable<IBitAiMessage> NewMessages(IReadOnlyList<IBitAiMessage> transcript)
     {
         var start = transcript.Count;
-        while (start > 0 && !transcript[start - 1].Role.IsAssistant)
+        while (start > 0 && !(transcript[start - 1].Role.IsAssistant && !ChatStageActions.IsAppMessage(transcript[start - 1])))
         {
             start--;
         }
@@ -29,12 +32,20 @@ internal static class AgUiMapping
         return transcript.Skip(start).Where(m => m.Role.IsUser);
     }
 
-    /// <summary>Bit's transcript as AG-UI messages: user turns, assistant turns with their tool calls, and tool results.</summary>
+    /// <summary>
+    /// Bit's transcript as AG-UI messages: user turns, assistant turns with their tool calls, and tool results. Messages the
+    /// app showed are left out.
+    /// </summary>
     public static List<AGUIMessage> ToAgUiMessages(IEnumerable<IBitAiMessage> transcript)
     {
         var list = new List<AGUIMessage>();
         foreach (var message in transcript)
         {
+            if (ChatStageActions.IsAppMessage(message))
+            {
+                continue;
+            }
+
             if (message.Role.IsUser)
             {
                 list.Add(new AGUIUserMessage { Id = message.MessageId, Content = new AGUIContent(message.GetText()) });

@@ -24,6 +24,16 @@ internal sealed class FakeChatClient : IChatClient
         var inputTokens = list.Sum(m => m.Text.Length + 40) / 4;
         await Task.Yield();
 
+        // "fail: ..." makes the run throw: an exception written for the user, or one that must stay on the server.
+        switch (list.LastOrDefault()?.Text)
+        {
+            case "fail: user-facing":
+                yield return new ChatResponseUpdate(ChatRole.Assistant, "Checking your account") { MessageId = messageId };
+                throw new AgentServer.UserFacingException(AgentServer.UserFacingMessage);
+            case "fail: internal":
+                throw new InvalidOperationException(AgentServer.InternalSecret);
+        }
+
         // A tool has just answered: describe its result.
         if (list.LastOrDefault()?.Contents.OfType<FunctionResultContent>().LastOrDefault() is { } result)
         {

@@ -25,7 +25,10 @@ public abstract class ChatStageComponent<TData> : ComponentBase
     [Parameter]
     public BitAiToolCallPart? ToolCall { get; set; }
 
-    /// <summary>Talks back to the agent from the component, for example when the user presses a button on it.</summary>
+    /// <summary>
+    /// Talks back to the agent from the component, for example when the user presses a button on it, or shows another
+    /// component in the transcript (<see cref="ChatStageActions.ShowAsync{TData}"/>).
+    /// </summary>
     [Parameter, EditorRequired]
     public ChatStageActions Chat { get; set; } = default!;
 }

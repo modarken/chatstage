@@ -123,7 +123,9 @@ public sealed partial class AgUiTransport : IBitAiTransport, IBitAiApprovalTrans
 
                     if (current is RunErrorEvent error)
                     {
-                        failure = new BitAiError(error.Message ?? "The agent run failed.") { Code = error.Code, Kind = BitAiErrorKind.Provider };
+                        // RUN_ERROR's message is shown to the user as the server wrote it (see ChatStage.Server's DescribeError).
+                        var message = string.IsNullOrWhiteSpace(error.Message) ? "The agent run failed." : error.Message;
+                        failure = new BitAiError(message) { Code = error.Code, Kind = BitAiErrorKind.Provider };
                         break;
                     }
 
