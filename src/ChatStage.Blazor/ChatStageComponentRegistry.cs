@@ -74,12 +74,12 @@ internal sealed class ChatStageComponentRegistry
     private static object? Read(JsonElement value, Type type, JsonSerializerOptions json) =>
         type == typeof(JsonElement) ? value : value.Deserialize(type, json);
 
-    private static void Render(RenderTreeBuilder builder, Registration registration, object? data, BitAiToolCallPart? toolCall, BitAiChatSession? session)
+    private void Render(RenderTreeBuilder builder, Registration registration, object? data, BitAiToolCallPart? toolCall, BitAiChatSession? session)
     {
         builder.OpenComponent(0, registration.Component);
         builder.AddComponentParameter(1, nameof(ChatStageComponent<object>.Data), data);
         builder.AddComponentParameter(2, nameof(ChatStageComponent<object>.ToolCall), toolCall);
-        builder.AddComponentParameter(3, nameof(ChatStageComponent<object>.Chat), ChatStageActions.For(session));
+        builder.AddComponentParameter(3, nameof(ChatStageComponent<object>.Chat), ChatStageActions.For(session, this));
         builder.CloseComponent();
     }
 }

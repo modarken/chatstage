@@ -108,6 +108,19 @@ public sealed class AgUiTransportTests
         var error = Assert.IsType<BitAiErrorEvent>(events[^1]);
         Assert.True(error.IsTerminal);
         Assert.Equal("StreamingError", error.Error.Code);
+        Assert.Equal("boom", error.Error.Message); // RUN_ERROR's message is what the user sees
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task ARunErrorWithoutAMessageShowsAGenericOne(string message)
+    {
+        var handler = new ScriptedHandler().Reply(Sse.Stream(Sse.RunStarted(), Sse.Error(message)));
+
+        var events = await RunAsync(Transport(handler), Request());
+
+        Assert.Equal("The agent run failed.", Assert.IsType<BitAiErrorEvent>(events[^1]).Error.Message);
     }
 
     [Theory]

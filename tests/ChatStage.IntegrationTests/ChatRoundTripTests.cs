@@ -184,6 +184,42 @@ public sealed class ChatRoundTripTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ARunThatFailsWithADescribedExceptionShowsItsMessage()
+    {
+        var reply = await TurnAsync("fail: user-facing");
+
+        var error = reply.Error ?? _session.LastError;
+        Assert.Equal(AgentServer.UserFacingMessage, error?.Message);
+    }
+
+    [Fact]
+    public async Task ARunThatFailsWithAnyOtherExceptionShowsOnlyTheGenericMessage()
+    {
+        var reply = await TurnAsync("fail: internal");
+
+        var error = Assert.IsType<BitAiError>(reply.Error ?? _session.LastError);
+        Assert.Equal(AgentServer.GenericError, error.Message);
+        Assert.DoesNotContain("hunter2", error.Message + error.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AShownComponentIsInTheTranscriptButNeverReachesTheAgent()
+    {
+        await TurnAsync("show me markdown");
+        var actions = ChatStageActions.For(_session);
+
+        var shown = await actions.ShowAsync("demo:invoice", new InvoiceCard.Invoice("INV-9", 3.25m), "Your latest invoice:", TestContext.Current.CancellationToken);
+        var next = await TurnAsync("what time is it");
+
+        Assert.NotNull(shown);
+        Assert.Equal("INV-9", Assert.Single(shown.Parts.OfType<BitAiStructuredDataPart>()).Value?.GetProperty("number").GetString());
+        Assert.Contains("Done", next.GetText(), StringComparison.Ordinal);
+        var sentToModel = string.Join("\n", _server.Model.Requests.SelectMany(r => r).Select(m => m.Text));
+        Assert.DoesNotContain("INV-9", sentToModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("Your latest invoice", sentToModel, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task WithoutTheTokenTheChatShowsAnAuthenticationError()
     {
         await using var services = Services(token: null);

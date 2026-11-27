@@ -44,10 +44,35 @@ public static class ChatStageServerExtensions
     /// Thread ids come from the client. A host with several users must authenticate the endpoint and register an
     /// <see cref="AgentIsolationKeyProvider"/> so each user's threads are kept apart.
     /// </remarks>
-    public static IEndpointConventionBuilder MapChatStageAgent(this IEndpointRouteBuilder endpoints, [StringSyntax("Route")] string pattern, AIAgent agent)
+    public static IEndpointConventionBuilder MapChatStageAgent(this IEndpointRouteBuilder endpoints, [StringSyntax("Route")] string pattern, AIAgent agent) =>
+        MapChatStageAgent(endpoints, pattern, agent, configure: null);
+
+    /// <summary>
+    /// Serves <paramref name="agent"/> over AG-UI at <paramref name="pattern"/>, with each thread kept in the session store
+    /// and tool approvals bound to the calls the agent recorded (see <see cref="ApprovalBindingAgent"/>). Failed runs are
+    /// logged; <see cref="ChatStageAgentOptions.DescribeError"/> decides which failures the user is told about.
+    /// </summary>
+    /// <param name="endpoints">The endpoint route builder.</param>
+    /// <param name="pattern">The route, for example <c>/agent</c>.</param>
+    /// <param name="agent">The agent. It must have a name: threads are stored under it.</param>
+    /// <param name="configure">Sets the endpoint's options, for example <c>o =&gt; o.DescribeError = ...</c>.</param>
+    /// <returns>The endpoint, for <c>RequireAuthorization()</c> and other conventions.</returns>
+    /// <remarks>
+    /// <para>
+    /// Thread ids come from the client. A host with several users must authenticate the endpoint and register an
+    /// <see cref="AgentIsolationKeyProvider"/> so each user's threads are kept apart.
+    /// </para>
+    /// <para>
+    /// The endpoint is the Agent Framework's AG-UI hosting (<c>MapAGUIServer</c>): the same request, events, session
+    /// store, isolation and <c>AGUIStreamOptions</c> (from the endpoint's metadata or from options).
+    /// </para>
+    /// </remarks>
+    public static IEndpointConventionBuilder MapChatStageAgent(this IEndpointRouteBuilder endpoints, [StringSyntax("Route")] string pattern, AIAgent agent, Action<ChatStageAgentOptions>? configure)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentNullException.ThrowIfNull(agent);
+        var options = new ChatStageAgentOptions();
+        configure?.Invoke(options);
         if (string.IsNullOrWhiteSpace(agent.Name))
         {
             throw new ArgumentException("The agent needs a name: its threads are stored under it.", nameof(agent));
@@ -60,6 +85,6 @@ public static class ChatStageServerExtensions
         }
 
         var logger = endpoints.ServiceProvider.GetRequiredService<ILogger<ApprovalBindingAgent>>();
-        return endpoints.MapAGUIServer(pattern, new ApprovalBindingAgent(agent, logger));
+        return ChatStageAgentEndpoint.Map(endpoints, pattern, new ApprovalBindingAgent(agent, logger), options, logger);
     }
 }

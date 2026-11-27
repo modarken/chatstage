@@ -2,6 +2,7 @@
 @implements IAsyncDisposable
 @inject BitAiChatSessionFactory SessionFactory
 @inject IOptions<ChatStageOptions> Options
+@inject ChatStageComponentRegistry Components
 
 <div class="chatstage" data-testid="chatstage">
     <header class="chatstage-header">
@@ -67,6 +68,12 @@
     /// <summary>The chat session, for code that drives the chat (approvals, sending). Set once the component has initialized.</summary>
     public BitAiChatSession? Session => _session;
 
+    /// <summary>
+    /// The chat's <see cref="ChatStageActions"/>, for app code outside the chat: send a message, or show one of your
+    /// components in the transcript with <see cref="ChatStageActions.ShowAsync{TData}"/>. Read-only until initialized.
+    /// </summary>
+    public ChatStageActions Actions => ChatStageActions.For(_session, Components);
+
     private string? UsageText => Conversation.LastMessage?.Metadata?.Usage is { IsEmpty: false } u
         ? $"{(u.InputTokens ?? 0) + (u.OutputTokens ?? 0):N0} tokens"
         : null;
@@ -90,6 +97,7 @@
         }
 
         _session = SessionFactory.Create(Conversation, SessionFactory.Defaults);
+        ChatStageActions.For(_session, Components); // so ShowAsync checks and serializes with the app's registrations
         Conversation.Changed += OnConversationChanged;
         _subscribed = Conversation;
     }

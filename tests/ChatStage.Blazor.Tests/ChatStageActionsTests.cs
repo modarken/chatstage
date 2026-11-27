@@ -75,6 +75,42 @@ public sealed class ChatStageActionsTests
     }
 
     [Fact]
+    public async Task AMessageShownDuringAReplyWaitsForTheReplyAndKeepsItsPlace()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var transport = new GatedTransport();
+        var services = new ServiceCollection().AddLogging();
+        services.AddBitBlazorUIAIServices(ai =>
+        {
+            ai.UseTransport(transport);
+            ai.ConfigureSessions(o => o with { ExecuteTools = false, InterruptOnSubmit = false });
+        });
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var factory = scope.ServiceProvider.GetRequiredService<BitAiChatSessionFactory>();
+        var conversation = new BitAiConversation("c");
+        await using var session = factory.Create(conversation, factory.Defaults);
+        var actions = ChatStageActions.For(session);
+
+        var first = session.SubmitAsync("first", null, ct);
+        await transport.Started.Task.WaitAsync(ct);
+        var shown = actions.ShowAsync("acme:matches", new { count = 2 }, "Two matches.", ct);
+        var after = actions.SendAsync("then this", ct);
+        Assert.Equal(2, actions.QueuedCount);
+        Assert.False(shown.IsCompleted);
+
+        transport.Release.TrySetResult();
+        await first.WaitAsync(ct);
+        await Task.WhenAll(shown, after).WaitAsync(TimeSpan.FromSeconds(10), ct);
+
+        // user "first", its reply, the shown message, user "then this", its reply.
+        Assert.Equal(5, conversation.Messages.Count);
+        Assert.Same(await shown, conversation.Messages[2]);
+        Assert.Equal("ok", conversation.Messages[1].GetText());
+        Assert.Equal(["first", "then this"], transport.Prompts);
+    }
+
+    [Fact]
     public async Task AChatWithoutASessionCantSend()
     {
         var actions = ChatStageActions.For(null);

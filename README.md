@@ -131,7 +131,7 @@ services.AddChatStage(...).AddToolComponent<ListingCard, Listing>("find_listing"
 |---|---|
 | `Data` | The tool's JSON result, read into `TData` (`null` until the tool has returned). |
 | `ToolCall` | The call: status (running, completed, rejected, failed), arguments and raw result. |
-| `Chat` | `ChatStageActions`: `SendAsync(text)` sends a user message to the agent. |
+| `Chat` | `ChatStageActions`: `SendAsync(text)` sends a user message to the agent; `ShowAsync(...)` shows a component without it. |
 
 ### Your own component for an AG-UI custom event
 
@@ -148,7 +148,56 @@ Custom events with no registered component are passed through to Bit as `BitAiCu
 
 `ChatStageActions.SendAsync` sends a user message. A message sent while the agent is still replying is **queued and
 sent when the reply ends**, in order; nothing is dropped. `IsBusy`, `QueuedCount` and the `Changed` event let a component
-show that it's waiting. Outside a component, `ChatStageActions.For(session)` gives the same object.
+show that it's waiting. Outside a component, `<ChatStageChat>`'s `Actions` (or `ChatStageActions.For(session)`) gives
+the same object.
+
+### Showing your own component without the agent
+
+`ChatStageActions.ShowAsync` puts a component in the transcript from app code, with no agent run: for example a
+"View matches" button that shows the matching lots as listing cards. The component is the one registered with
+`AddEventComponent` for that name.
+
+```csharp
+services.AddChatStage(...).AddEventComponent<MatchesCard, MatchList>("acme:matches");
+```
+
+```razor
+<ChatStageChat @ref="_chat" />
+<button @onclick="ShowMatches">View matches</button>
+
+@code {
+    private ChatStageChat _chat = default!;
+
+    private async Task ShowMatches() =>
+        await _chat.Actions.ShowAsync("acme:matches", await Lots.FindMatchesAsync(), "Lots matching your watchlist:");
+}
+```
+
+- It appends an assistant message with the optional text and the component, whose `Data` is the value you passed
+  (serialized with the `ConfigureJson` options, so the message can be saved with the conversation).
+- **It is never sent to the agent**, as history or otherwise, whether `ServerKeepsHistory` is `true` or `false`.
+  `ChatStageActions.IsAppMessage(message)` tells such a message apart.
+- Like `SendAsync`, it waits while the agent is replying and keeps its place in the queue, so it never lands inside a
+  reply. A component inside the chat can call it too, through its `Chat` parameter.
+
+### Errors the user should see
+
+When a run fails, the chat shows the `message` of the AG-UI `RUN_ERROR` event that ended it (or "The agent run
+failed." when it is empty). That is the whole contract, so it works with any AG-UI server: send a `RUN_ERROR` whose
+`message` is written for the user.
+
+`MapChatStageAgent` sends only the AG-UI hosting's generic message ("An error occurred while streaming the agent
+response."), so no internal detail leaks. To let your own exceptions through, describe them:
+
+```csharp
+app.MapChatStageAgent("/agent", agent, o =>
+    o.DescribeError = ex => ex is UserFacingException ? ex.Message : null);
+```
+
+`DescribeError` returns the text for the user, or `null` to keep the exception private (the generic message is sent).
+Every failed run is still logged on the server. Whether described or not, a failed run's session is **saved before
+the `RUN_ERROR` is sent**, so state the agent set before it threw (for example a note in `session.StateBag`) is there
+for the next run, and the client can't start that run before the save.
 
 ### Authentication
 

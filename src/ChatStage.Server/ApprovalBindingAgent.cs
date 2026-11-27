@@ -23,7 +23,7 @@ namespace ChatStage.Server;
 /// </para>
 /// <para>
 /// The binding reads the thread's recorded history from its <see cref="AgentSession"/>, so the agent must be served with
-/// a session store (see <see cref="ChatStageServerExtensions.MapChatStageAgent"/>), and the Agent Framework's own approval
+/// a session store (see <see cref="ChatStageServerExtensions.MapChatStageAgent(Microsoft.AspNetCore.Routing.IEndpointRouteBuilder, string, AIAgent)"/>), and the Agent Framework's own approval
 /// response binding should stay on (the default).
 /// </para>
 /// </remarks>
