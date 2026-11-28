@@ -118,9 +118,9 @@ public sealed partial class AgUiTransport : IBitAiTransport, IBitAiApprovalTrans
         var threadId = request.ConversationId ?? Guid.NewGuid().ToString("N");
         var turn = new Turn();
         _restoring.TryRemove(threadId, out var restored);
-        List<AGUIMessage> messages = _options.ServerKeepsHistory
-            ? AgUiMapping.ToAgUiMessages(AgUiMapping.NewMessages(request.Messages))
-            : AgUiMapping.ToAgUiMessages(request.Messages);
+        var outgoing = (_options.ServerKeepsHistory ? AgUiMapping.NewMessages(request.Messages) : request.Messages).ToList();
+        var loaded = restored is null ? await AgUiMapping.LoadAttachmentsAsync(outgoing, cancellationToken).ConfigureAwait(false) : null;
+        List<AGUIMessage> messages = AgUiMapping.ToAgUiMessages(outgoing, loaded);
         IList<AGUIResume>? resume = _abandoned.TryRemove(threadId, out var abandoned)
             ? [.. abandoned.Select(a => AgUiMapping.Resume(a, approved: false))]
             : null;

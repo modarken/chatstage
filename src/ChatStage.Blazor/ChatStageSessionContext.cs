@@ -51,7 +51,11 @@ public sealed class ChatStageSessionContext : IDisposable
     /// <summary>A custom composer's focus implementation, called by FocusInputAsync.</summary>
     public Func<ValueTask>? FocusInput { get; set; }
 
-    /// <summary>Raised when conversation, streaming or busy state changes, possibly on a background thread.</summary>
+    /// <summary>
+    /// Raised when the conversation, the session or the busy state changes, including on every streamed delta, possibly
+    /// on a background thread. Use <c>InvokeAsync</c> in a component; <c>ChatStageSession</c> already renders its layout
+    /// for you, coalesced.
+    /// </summary>
     public event Action? Changed;
 
     /// <summary>Raised after an accepted submission is added to the conversation, before the reply completes.</summary>
@@ -140,16 +144,36 @@ public sealed class ChatStageSessionContext : IDisposable
                 return false;
             }
 
-            // SubmitAsync inserts the user message synchronously before its first await.
-            var count = Conversation.Messages.Count;
-            var reply = Session.SubmitAsync(submission.Text, submission.Attachments, cancellationToken);
-            if (Conversation.Messages.Count == count)
+            // The submission is accepted once the session adds the user message, whenever it does so; a submission the
+            // session turns away ends without adding one.
+            var accepted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnAdded(BitAiConversation _, BitAiMessage message)
+            {
+                if (message.Role.IsUser)
+                {
+                    accepted.TrySetResult();
+                }
+            }
+
+            Task<BitAiMessage?> reply;
+            Conversation.MessageAdded += OnAdded;
+            try
+            {
+                reply = Session.SubmitAsync(submission.Text, submission.Attachments, cancellationToken);
+                await Task.WhenAny(accepted.Task, reply);
+            }
+            finally
+            {
+                Conversation.MessageAdded -= OnAdded;
+            }
+
+            if (!accepted.Task.IsCompleted)
             {
                 await reply;
                 return false;
             }
 
-            if (InputText == draft && (text is null || InputText == text))
+            if (InputText == draft && (text is null || text == draft))
             {
                 InputText = string.Empty;
             }

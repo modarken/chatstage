@@ -3,79 +3,86 @@
 @inject BitAiChatSessionFactory SessionFactory
 @inject ChatStageComponentRegistry Components
 @inject IOptions<ChatStageOptions> Options
+@inject BitAiUiOptions RegisteredUi
 
 @if (Context is { } context)
 {
     <CascadingValue Value="context">
-        @ChildContent?.Invoke(context)
+        <BitAiOptionsProvider UiOptions="_ui">@ChildContent?.Invoke(context)</BitAiOptionsProvider>
     </CascadingValue>
 }
 
 @code {
+    private BitAiConversation? _parameter;
     private BitAiConversation? _attached;
     private ChatStageRenderSubscription? _renders;
+    private BitAiUiOptions _ui = BitAiUiOptions.Default;
 
-    /// <summary>The conversation to hydrate or switch. Changing its instance stops and disposes the old session.</summary>
-    [Parameter] public BitAiConversation Conversation { get; set; } = new(Guid.NewGuid().ToString("N"));
+    /// <summary>
+    /// The conversation to show; its id is the AG-UI thread id. Hydrate it (history, title) before handing it over. A
+    /// different instance switches threads: the old session is stopped and disposed. When not set, a new conversation is
+    /// started.
+    /// </summary>
+    [Parameter] public BitAiConversation? Conversation { get; set; }
 
-    /// <summary>Receives a new conversation when NewConversationAsync is called.</summary>
+    /// <summary>Receives the new conversation started by <see cref="NewConversationAsync"/>, for <c>@bind-Conversation</c>.</summary>
     [Parameter] public EventCallback<BitAiConversation> ConversationChanged { get; set; }
 
-    /// <summary>The entire layout. This component adds no DOM elements.</summary>
+    /// <summary>The entire layout, handed the session's context. This component renders no element of its own.</summary>
     [Parameter] public RenderFragment<ChatStageSessionContext>? ChildContent { get; set; }
 
-    /// <summary>The current context, available after initialization.</summary>
+    /// <summary>The current context: the conversation, the session, actions, busy state and the composer hooks.</summary>
     public ChatStageSessionContext? Context { get; private set; }
-
-    /// <summary>Raised when session or conversation state changes, on the originating thread.</summary>
-    public event Action? Changed;
 
     /// <summary>The current session.</summary>
     public BitAiChatSession? Session => Context?.Session;
 
-    /// <summary>The current actions.</summary>
+    /// <summary>The current actions: send a message, or show an app component, from code around the layout.</summary>
     public ChatStageActions Actions => ChatStageActions.For(Session, Components);
 
-    /// <summary>Whether a submission or reply is active.</summary>
+    /// <summary>Whether a submission or reply is in progress.</summary>
     public bool IsBusy => Context?.IsBusy ?? false;
 
     /// <summary>Stops the current reply.</summary>
     public void Stop() => Context?.Stop();
 
-    /// <summary>Focuses the registered composer.</summary>
+    /// <summary>Focuses the composer that registered itself with the context.</summary>
     public ValueTask FocusInputAsync() => Context?.FocusInputAsync() ?? ValueTask.CompletedTask;
 
-    /// <summary>Starts a fresh thread and informs the parent binding.</summary>
+    /// <summary>Starts a new thread: stops and disposes the current session and raises <see cref="ConversationChanged"/>.</summary>
     public async Task NewConversationAsync()
     {
-        Conversation = new(Guid.NewGuid().ToString("N"));
-        await AttachAsync();
-        await ConversationChanged.InvokeAsync(Conversation);
-        await InvokeAsync(StateHasChanged);
+        var conversation = new BitAiConversation(Guid.NewGuid().ToString("N"));
+        await AttachAsync(conversation);
+        await ConversationChanged.InvokeAsync(conversation);
+        StateHasChanged();
     }
 
     /// <inheritdoc/>
-    protected override Task OnParametersSetAsync() => AttachAsync();
-
-    private async Task AttachAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        if (ReferenceEquals(_attached, Conversation))
+        // Only a new parameter value switches threads, so a parent that does not bind keeps a thread started here.
+        if (_attached is null || !ReferenceEquals(_parameter, Conversation))
+        {
+            _parameter = Conversation;
+            await AttachAsync(Conversation ?? _attached ?? new(Guid.NewGuid().ToString("N")));
+        }
+    }
+
+    private async Task AttachAsync(BitAiConversation conversation)
+    {
+        if (ReferenceEquals(_attached, conversation))
         {
             return;
         }
 
         await DetachAsync();
-        var session = SessionFactory.Create(Conversation, SessionFactory.Defaults);
-        ChatStageActions.For(session, Components);
+        var session = SessionFactory.Create(conversation, SessionFactory.Defaults);
+        ChatStageActions.For(session, Components); // so ShowAsync checks and serializes with the app's registrations
         Context = new(session, Options.Value);
-        Context.Changed += OnChanged;
-        _renders = new(Context, Options.Value.RenderInterval, () => InvokeAsync(StateHasChanged));
-        _attached = Conversation;
-    }
-
-    private void OnChanged()
-    {
-        Changed?.Invoke();
+        _ui = Options.Value.ResolveUi(RegisteredUi);
+        _renders = new(Context, _ui.RenderInterval, () => InvokeAsync(StateHasChanged));
+        _attached = conversation;
     }
 
     private async ValueTask DetachAsync()
@@ -83,8 +90,13 @@
         if (Context is { } context)
         {
             Context = null;
-            context.Changed -= OnChanged;
-            if (_renders is not null) await _renders.DisposeAsync();
+            _attached = null;
+            if (_renders is not null)
+            {
+                await _renders.DisposeAsync();
+                _renders = null;
+            }
+
             context.Dispose();
             await context.Session.DisposeAsync();
         }

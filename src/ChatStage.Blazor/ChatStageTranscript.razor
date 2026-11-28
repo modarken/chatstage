@@ -1,7 +1,8 @@
 @namespace ChatStage
 @inject IOptions<ChatStageOptions> Options
+@inject BitAiUiOptions RegisteredUi
 
-<CascadingValue Value="EffectiveUiOptions">
+<BitAiOptionsProvider UiOptions="_ui">
     <BitAiMessageList @key="Context.Session" @ref="_list" Conversation="Context.Conversation" Session="Context.Session"
                       Classes="ListClasses" Styles="ListStyles" EmptyTemplate="EmptyTemplate" OnPinnedChange="PinnedChanged"
                       Class="@($"chatstage-transcript {Class}")" Style="@Style" @attributes="Attributes">
@@ -16,7 +17,7 @@
             }
         </MessageTemplate>
     </BitAiMessageList>
-</CascadingValue>
+</BitAiOptionsProvider>
 
 @code {
     private BitAiMessageList? _list;
@@ -33,10 +34,21 @@
     /// <summary>Content before any messages exist.</summary>
     [Parameter] public RenderFragment? EmptyTemplate { get; set; }
 
-    /// <summary>Bit presentation options; AutoScroll follows new content only while already at the bottom.</summary>
+    /// <summary>Bit's presentation options, in place of <see cref="ChatStageOptions.UiOptions"/>. With <c>AutoScroll</c> (the default) the transcript follows new content only while the reader is at the bottom.</summary>
     [Parameter] public BitAiUiOptions? UiOptions { get; set; }
 
-    private BitAiUiOptions EffectiveUiOptions => UiOptions ?? Options.Value.UiOptions with { RenderInterval = Options.Value.RenderInterval };
+    private BitAiUiOptions? _uiParameter;
+    private BitAiUiOptions? _ui;
+
+    /// <inheritdoc/>
+    protected override void OnParametersSet()
+    {
+        if (_ui is null || !ReferenceEquals(_uiParameter, UiOptions))
+        {
+            _uiParameter = UiOptions;
+            _ui = UiOptions ?? Options.Value.ResolveUi(RegisteredUi);
+        }
+    }
 
     /// <summary>Notification when the reader moves to or away from the bottom.</summary>
     [Parameter] public EventCallback<bool> PinnedChanged { get; set; }

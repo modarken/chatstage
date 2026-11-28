@@ -82,11 +82,12 @@ Resources.Add("services", services.BuildServiceProvider());
 <ChatStageChat Title="Assistant" EmptyTitle="How can I help?" />
 ```
 
-The host page loads Bit's assets:
+The host page loads Bit's assets (and ChatStage's stylesheet, needed for a custom layout):
 
 ```html
 <link rel="stylesheet" href="_content/Bit.BlazorUI/styles/bit.blazorui.css" />
 <link rel="stylesheet" href="_content/Bit.BlazorUI.AI/styles/bit.blazorui.ai.css" />
+<link rel="stylesheet" href="_content/ChatStage.Blazor/chatstage.css" />
 <link rel="stylesheet" href="{YourApp}.styles.css" />
 <script src="_content/Bit.BlazorUI/scripts/bit.blazorui.js"></script>
 <script src="_content/Bit.BlazorUI.AI/scripts/bit.blazorui.ai.js"></script>
@@ -180,6 +181,135 @@ services.AddChatStage(...).AddEventComponent<MatchesCard, MatchList>("acme:match
 - Like `SendAsync`, it waits while the agent is replying and keeps its place in the queue, so it never lands inside a
   reply. A component inside the chat can call it too, through its `Chat` parameter.
 
+### Your own layout
+
+`<ChatStageChat>` is Bit's chat with a header. To lay the chat out yourself, without Bit's bubbles, avatars, toolbars
+or header, use the building blocks. They keep the AG-UI transport, streaming Markdown, your tool and event components,
+and the standard tool cards and secure approvals; nothing is replaced but the markup.
+
+```razor
+<ChatStageSession @ref="_chat" @bind-Conversation="_conversation">
+    <ChildContent Context="chat">
+        <ChatStageTranscript>
+            <LabelTemplate Context="message">[@(message.Role.IsUser ? "You" : "Sage")]:</LabelTemplate>
+        </ChatStageTranscript>
+        @if (chat.IsBusy)
+        {
+            <button class="chatstage-stop" @onclick="chat.Stop">Stop</button>
+        }
+        else
+        {
+            <ChatStageComposer Placeholder="Message Sage" @bind-InputText="_draft" />
+        }
+    </ChildContent>
+</ChatStageSession>
+```
+
+| Component | What it is |
+|---|---|
+| `ChatStageSession` | Renderless: owns the session for `Conversation` and hands its layout a `ChatStageSessionContext`. Renders no element. |
+| `ChatStageTranscript` | The scrolling message list (Bit's, with its virtualization). Follows new content only while the reader is at the bottom; `IsAtBottom`, `ScrollToLatestAsync`, `PinnedChanged`. `MessageTemplate`, `LabelTemplate`, `EmptyTemplate`. |
+| `ChatStageMessage` | One message, flat: optional `LabelTemplate` (inline with the first paragraph), the parts (Markdown, tool cards, approvals, your components), optional `MetadataTemplate`. `PartTemplate` replaces how each part is drawn. |
+| `ChatStageComposer` | A plain textarea and Send (Stop while busy). `@bind-InputText`, `SubmitOnEnter` (Shift+Enter is a newline), `Placeholder`, `SendText`, `StopText`, `Focused`, `Blurred`. Replace it with your own whenever you like. |
+
+`<ChatStageChat Unstyled="true">` gives the same chrome-free layout in one tag, and `ChatStageChat` also takes
+`TranscriptTemplate`, `MessageTemplate`, `ComposerTemplate`, `HeaderTemplate` and `EmptyTemplate`, plus
+`ShowHeader`, `ShowSuggestions`, `ShowAttachments`, `ShowContextMeter` and `ShowUsage`. Timestamps, message toolbars,
+usage and model names in Bit's layout are `UiOptions` switches (`ShowTimestamps`, `ShowMessageActions`, ...). Every
+component takes `Class`, `Style` and any other attribute for its root element.
+
+**The context** (`ChatStageSessionContext`, also `ChatStageChat.Context`) is the controller a custom composer or
+layout uses, with no DOM access or reflection:
+
+| Member | |
+|---|---|
+| `Conversation`, `Session`, `Actions` | The thread, Bit's session (approvals, retry) and `ChatStageActions`. |
+| `IsBusy`, `PendingApprovals`, `Changed` | Busy while a submission or reply is in progress; the open approval requests; raised on every change (often, possibly off the UI thread). |
+| `InputText` | The draft. Bind your input to it. |
+| `SubmitAsync(text?, attachments?, ct)` | Sends the draft (or the given text and attachments). Returns `false`, keeping the draft, when busy, empty or cancelled. |
+| `Submitting` | `async (submission, ct) => ...` runs first: change `Text` or `Attachments` (after an upload, a slash command), or set `Cancel`. |
+| `MessageSent`, `Escape` | Raised once the message is in the transcript; raised by the composer on Escape (close your popup). |
+| `Stop()`, `FocusInputAsync()`, `FocusInput` | Stop the reply; focus the composer (a custom composer sets `FocusInput`). |
+| `ReplaceMessageText(text, messageId?)` | Replaces a reply's prose, keeping its tool cards and approvals. |
+
+`ChatStageSession` and `ChatStageChat` also have `Stop()`, `FocusInputAsync()` and `NewConversationAsync()` (it raises
+`ConversationChanged`). History is hydration: build a `BitAiConversation` with the thread's id and its messages and hand
+it to `Conversation`; a different instance switches threads (the old session is stopped and disposed).
+
+A complete custom layout (flat labels, a slash-command popup, only Stop while streaming) is
+[`samples/ChatStage.Samples.Wpf/CustomChat.razor`](samples/ChatStage.Samples.Wpf/CustomChat.razor).
+
+### Styling
+
+`_content/ChatStage.Blazor/chatstage.css` styles the chrome-free layout through these classes and variables, which are
+ChatStage's public styling contract. Set the variables on any ancestor; restyle the classes freely.
+
+| Part | Class | Variables |
+|---|---|---|
+| Layout root | `chatstage-headless` (Unstyled) / `chatstage` | |
+| Transcript | `chatstage-transcript`, `chatstage-transcript-content` | `--chatstage-transcript-padding`, `--chatstage-message-gap`, `--chatstage-scrollbar-thumb`, `--chatstage-scrollbar-track`, `--chatstage-scrollbar-width` |
+| Selection | | `--chatstage-selection-background`, `--chatstage-selection-color` |
+| Message | `chatstage-message` (`data-role="user"`/`"assistant"`), `chatstage-message-labelled` | `--chatstage-message-padding`, `--chatstage-message-background`, `--chatstage-line-height` |
+| Label, body, metadata | `chatstage-label`, `chatstage-body`, `chatstage-metadata` | `--chatstage-label-color`, `--chatstage-user-label-color`, `--chatstage-label-weight`, `--chatstage-label-gap`, `--chatstage-body-color`, `--chatstage-metadata-size`, `--chatstage-metadata-color`, `--chatstage-metadata-opacity` |
+| Markdown | `chatstage-text`, `chatstage-markdown`, `chatstage-prose`, `chatstage-paragraph`, `chatstage-heading`, `chatstage-list`, `chatstage-list-item`, `chatstage-link`, `chatstage-inline-code`, `chatstage-caret` | `--chatstage-paragraph-margin`, `--chatstage-heading-1-size` … `-3-size`, `--chatstage-heading-small-size`, `--chatstage-heading-weight`, `--chatstage-heading-margin`, `--chatstage-list-marker`, `--chatstage-ordered-list-marker`, `--chatstage-list-indent`, `--chatstage-list-margin`, `--chatstage-code-background`, `--chatstage-code-color`, `--chatstage-code-font`, `--chatstage-code-size`, `--chatstage-code-padding`, `--chatstage-code-radius`, `--chatstage-inline-code-background`, `--chatstage-link-color`, `--chatstage-caret-color` |
+| Tool cards, approvals | `chatstage-tool`, `chatstage-tool-card`, `chatstage-tool-header`, `chatstage-tool-body`, `chatstage-approval` | `--chatstage-tool-margin`, `--chatstage-tool-background`, `--chatstage-tool-border`, `--chatstage-tool-color`, `--chatstage-approval-background`, `--chatstage-approval-color` |
+| Composer | `chatstage-composer` (`data-busy`), `chatstage-input`, `chatstage-send`, `chatstage-stop` | `--chatstage-composer-gap`, `--chatstage-composer-padding`, `--chatstage-input-color`, `--chatstage-input-background`, `--chatstage-input-caret`, `--chatstage-input-border`, `--chatstage-input-padding`, `--chatstage-input-radius`, `--chatstage-placeholder-color`, `--chatstage-button-padding`, `--chatstage-send-color`, `--chatstage-send-background`, `--chatstage-stop-color`, `--chatstage-stop-background` |
+
+With a `LabelTemplate`, the label runs into the first paragraph (`[Sage]: Hello…`). `ChatStageMessage`'s
+`TextClasses`/`TextStyles` and `ToolClasses`/`ToolStyles`, and `ChatStageChat`'s `Classes`/`Styles`, take Bit's own
+class and style parts for anything finer.
+
+### Final text from the server
+
+A server that settles a reply's text only at the end (for example resolving image or attachment references) can send
+it in a `CUSTOM` event after the last text delta and before `RUN_FINISHED`:
+
+```json
+{ "type": "CUSTOM", "name": "acme:final-text", "value": { "text": "Here it is: ![chart](/media/42.png)" } }
+```
+
+```csharp
+services.AddChatStage(o =>
+{
+    o.Endpoint = new Uri("https://localhost:5001/agent");
+    o.FinalText = e => e.Name == "acme:final-text" && e.Data is JsonElement data ? data.GetProperty("text").GetString() : null;
+});
+```
+
+The text replaces the streamed prose of the reply, in any layout; tool cards, approvals and reasoning stay. App code can
+do the same with `ChatStageSessionContext.ReplaceMessageText`.
+
+### Approvals after a reload
+
+A reload, or a restart of a desktop app, loses an open Allow / Decline card. If your server can tell you which
+approvals are still open on a thread (their interrupt id, tool call id, tool name, arguments and question), show them
+again with the standard card:
+
+```razor
+@inject AgUiTransport Transport
+
+<ChatStageChat @ref="_chat" Conversation="_restoredConversation" />
+
+@code {
+    private ChatStageChat _chat = default!;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && _openApprovals.Count > 0)
+        {
+            // Completes when the user has answered and the resumed run has finished, so don't await it here.
+            _ = Transport.RestoreApprovalsAsync(_chat.Session!, _openApprovals);
+        }
+    }
+}
+```
+
+`ChatStagePendingApproval(Id, ToolCallId, Name, Arguments, Message)` is one approval. The cards are drawn locally;
+nothing is sent until the user answers, and then only the usual resume (interrupt id, decision, tool call id) goes to
+the server, which must run the call **it** recorded (as `ChatStage.Server` does). The name and arguments are only shown.
+Several approvals resume together; Stop declines them on the thread's next run, as for a live run. The session must be
+idle.
+
 ### Errors the user should see
 
 When a run fails, the chat shows the `message` of the AG-UI `RUN_ERROR` event that ended it (or "The agent run
@@ -224,9 +354,87 @@ A 401 or 403 shows in the chat as an authentication or access error.
 | `ModelId` | Shown with each reply. |
 | `ServerKeepsHistory` | Default `true`: each run sends only the new message (the server keeps the thread). Set `false` for a stateless AG-UI server. |
 | `ResumeRetries`, `ResumeRetryDelay` | Retries for an approval's resume when the connection fails (default 2, from 500 ms). |
+| `UiOptions` | Bit's `BitAiUiOptions` for the chat: image policy, timestamps, message actions, Enter behavior, strings... Default `null`: Bit's defaults. A component's own `UiOptions` parameter wins. |
+| `RenderInterval` | The minimum time between renders while a reply streams (default `null`: `UiOptions.RenderInterval`, 50 ms). |
+| `FinalText` | Maps a `CUSTOM` event to the reply's final text (see above). |
+
+For example, images only from your own host, others behind a click to load, no inline `data:` images:
+
+```csharp
+o.UiOptions = BitAiUiOptions.Default with
+{
+    Images = BitAiImagePolicy.AllowListedHosts("app.example.com") with { AllowDataImages = false },
+};
+```
+
+Bit's allow-list is by host: a relative URL, or another host, is shown after a click. For strictly same-origin images,
+also send the CSP `img-src 'self'` (the browser then refuses any other source).
 
 Everything else in Bit.BlazorUI.AI (conversation stores, themes through `BitThemeManager`, strings, the model catalog)
 works as Bit documents it. `<ChatStageChat>` exposes its `Session`; use `<BitAiChat>` directly for full control.
+
+### Rendering while a reply streams
+
+Bit's views render the streamed text themselves, at most once per `RenderInterval`, re-parsing only the Markdown that
+changed. `ChatStageChat` and `ChatStageSession` render their own layout through one Bit `BitAiRenderScheduler`: never
+for a streamed delta, coalesced for other conversation changes, and at once for a tool, approval, error, usage or
+completion event, a change of busy state and the end of a turn.
+
+Measured with [`samples/ChatStage.Samples.OverlayProbe`](samples/ChatStage.Samples.OverlayProbe) (Release, .NET 11,
+Windows; a 640x480 transparent, off-screen window; 5 s of streaming at one delta every ~2.5 ms; CPU in percent of one
+core; private bytes of the app and its WebView2 processes; local synthetic numbers, not guarantees):
+
+| Scenario | Layout renders | App CPU | App + WebView2 CPU | Private MiB |
+|---|---:|---:|---:|---:|
+| 0.2 wrapper, conversation `Changed` on every delta | 1952 | 75.5% | 111.2% | 389 |
+| 0.3, conversation `Changed` on every delta | 101 | 49.9% | 68.7% | 374 |
+| 0.3, text only, BlazorWebView (composition) | 4 | 40.3% | 55.2% | 345 |
+| 0.3, text only, Blazor Server page in a `WebView2CompositionControl` | 7 | 41.2% | 55.8% | 362 |
+
+### Transparent WPF windows (overlays)
+
+A WPF window with `AllowsTransparency="True"` can't show the default `BlazorWebView` (an HWND control). Turn on its
+composition mode, which renders through `WebView2CompositionControl`, in process, with no web server or Blazor
+Server circuit:
+
+```xml
+<Window AllowsTransparency="True" WindowStyle="None" Background="Transparent" ...>
+    <blazor:BlazorWebView UseCompositionControl="True" HostPage="wwwroot/index.html" Services="{DynamicResource services}">
+        ...
+    </blazor:BlazorWebView>
+</Window>
+```
+
+and give the page a transparent background (`html, body, #app { background: transparent; }`). `UseCompositionControl`
+is part of `Microsoft.AspNetCore.Components.WebView.Wpf` (11.0); `BlazorWebViewInitializing` sets the browser's user
+data folder, profile and options. That control does not accept an existing `CoreWebView2Environment`, so it can't be
+made to share a browser process created elsewhere in the app; ChatStage doesn't add a host of its own for that. In the
+probe above, the in-process composition host used about as much CPU as a Blazor Server page in a composition control,
+and less memory.
+
+### Hosting under a sub-path (`/ui/`)
+
+Serve the app at the sub-path and set the base, keeping every asset path relative (no leading `/`):
+
+```html
+<base href="/ui/" />
+<link rel="stylesheet" href="_content/ChatStage.Blazor/chatstage.css" />
+<link rel="stylesheet" href="{YourApp}.styles.css" />
+```
+
+Don't set `StaticWebAssetBasePath` for this in a WebAssembly app: the SDK then writes the imports of the scoped-CSS
+bundle as `../_content/...`, which miss under the base and lose the components' styles. If you need it anyway, link
+`_content/ChatStage.Blazor/chatstage.css` as above: it carries the default chat's layout too.
+
+A Content Security Policy for a WebAssembly host needs at least:
+
+```
+default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;
+connect-src 'self' https://your-agent.example.com; base-uri 'self'; object-src 'none'
+```
+
+`'wasm-unsafe-eval'` runs the .NET runtime, `base-uri 'self'` allows the `<base>` element, `connect-src` must include
+the agent's endpoint, and Bit's views use inline styles. Narrow `img-src` to what your replies may show.
 
 ## How approvals work
 

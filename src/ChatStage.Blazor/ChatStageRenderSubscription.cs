@@ -2,79 +2,81 @@ using Bit.BlazorUI;
 
 namespace ChatStage;
 
-// One Bit scheduler at the layout boundary; Markdown keeps its own incremental renderer unchanged.
+// Renders a layout root (ChatStageChat, ChatStageSession) through one Bit scheduler. Streamed deltas never render the
+// root: Bit's part views render themselves. Structural changes (a message added, the title) are coalesced; a change of
+// busy state, a tool, approval, error, usage or completion event, and the end of a turn render at once.
 internal sealed class ChatStageRenderSubscription : IAsyncDisposable
 {
     private readonly ChatStageSessionContext _context;
     private readonly BitAiRenderScheduler _scheduler;
-    private bool _generating;
     private bool _busy;
-    private readonly bool _streamingLayout;
+    private int _disposed;
 
-    internal ChatStageRenderSubscription(ChatStageSessionContext context, TimeSpan interval, Func<Task> render, bool streamingLayout = true)
+    internal ChatStageRenderSubscription(ChatStageSessionContext context, TimeSpan interval, Func<Task> render)
     {
         _context = context;
         _scheduler = new(render, interval);
-        _streamingLayout = streamingLayout;
         _busy = context.IsBusy;
         context.Changed += OnContextChanged;
         context.Conversation.Changed += OnConversationChanged;
-        _generating = context.Session.IsGenerating;
-        context.Session.StateChanged += OnStateChanged;
         context.Session.TurnCompleted += OnCompleted;
+        context.Session.ApprovalDecided += OnApprovalDecided;
         context.Session.Processor.EventApplied += OnApplied;
     }
 
     internal int RenderCount => _scheduler.RenderCount;
 
-    private void Request() => _scheduler.Request();
-
     private void OnConversationChanged(BitAiConversation conversation) => Request();
 
     private void OnContextChanged()
     {
-        if (_busy != _context.IsBusy)
+        var busy = _context.IsBusy;
+        if (_busy != busy)
         {
-            _busy = _context.IsBusy;
+            _busy = busy;
             Flush();
-        }
-        else if (_streamingLayout)
-        {
-            Request();
         }
     }
 
-    private void Flush() => _ = _scheduler.FlushAsync();
     private void OnCompleted(BitAiMessage _) => Flush();
 
-    private void OnStateChanged()
-    {
-        var generating = _context.Session.IsGenerating;
-        if (generating != _generating)
-        {
-            _generating = generating;
-            Flush();
-        }
-    }
+    private void OnApprovalDecided(BitAiToolCallPart part, BitAiApprovalDecision decision) => Flush();
 
     private void OnApplied(BitAiEvent evt)
     {
-        if (evt is BitAiTextDeltaEvent or BitAiReasoningDeltaEvent or BitAiToolCallDeltaEvent or BitAiStructuredDataDeltaEvent)
-        {
-            if (_streamingLayout) Request();
-        }
-        else
+        if (evt is not (BitAiTextDeltaEvent or BitAiReasoningDeltaEvent or BitAiToolCallDeltaEvent or BitAiStructuredDataDeltaEvent))
         {
             Flush();
+        }
+    }
+
+    private void Request()
+    {
+        if (Volatile.Read(ref _disposed) == 0)
+        {
+            _scheduler.Request();
+        }
+    }
+
+    private void Flush()
+    {
+        if (Volatile.Read(ref _disposed) == 0)
+        {
+            _ = _scheduler.FlushAsync();
         }
     }
 
     public ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        {
+            return ValueTask.CompletedTask;
+        }
+
         _context.Changed -= OnContextChanged;
         _context.Conversation.Changed -= OnConversationChanged;
-        _context.Session.StateChanged -= OnStateChanged;
         _context.Session.TurnCompleted -= OnCompleted;
+        _context.Session.ApprovalDecided -= OnApprovalDecided;
         _context.Session.Processor.EventApplied -= OnApplied;
         return _scheduler.DisposeAsync();
     }

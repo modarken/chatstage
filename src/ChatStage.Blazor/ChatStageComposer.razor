@@ -3,15 +3,15 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 
-<div @attributes="Attributes" class="chatstage-composer @Class" style="@Style">
+<div @attributes="Attributes" class="@($"chatstage-composer {Class}".TrimEnd())" style="@Style" data-busy="@(Context.IsBusy ? "true" : "false")">
+    <textarea @ref="_input" class="chatstage-input" value="@Context.InputText" @oninput="InputChangedAsync"
+              placeholder="@Placeholder" aria-label="@InputLabel" rows="@Rows" @onfocus="Focused" @onblur="Blurred"></textarea>
     @if (Context.IsBusy)
     {
         <button type="button" class="chatstage-stop" @onclick="Context.Stop">@StopText</button>
     }
     else
     {
-        <textarea @ref="_input" class="chatstage-input" value="@Context.InputText" @oninput="InputChangedAsync"
-                  placeholder="@Placeholder" aria-label="@InputLabel" @onfocus="Focused" @onblur="Blurred"></textarea>
         <button type="button" class="chatstage-send" @onclick="SendAsync">@SendText</button>
     }
 </div>
@@ -20,47 +20,52 @@
     private ElementReference _input;
     private IJSObjectReference? _module;
     private IJSObjectReference? _keyboard;
+    private bool? _keyboardSubmitOnEnter;
     private DotNetObjectReference<ChatStageComposer>? _reference;
     private ChatStageSessionContext? _attached;
     private string? _lastInputText;
 
-    /// <summary>The owning context. Replace this entire component to own a slash-command popup or attachments.</summary>
+    /// <summary>The owning context, cascaded by <c>ChatStageSession</c> or <c>ChatStageChat</c>.</summary>
+    /// <remarks>To own a slash-command popup, attachments or other controls, replace this component with your own.</remarks>
     [CascadingParameter] public ChatStageSessionContext Context { get; set; } = default!;
 
-    /// <summary>Two-way text binding; the context holds the actual draft.</summary>
+    /// <summary>The draft, for <c>@bind-InputText</c>; the context's <see cref="ChatStageSessionContext.InputText"/> holds it.</summary>
     [Parameter] public string? InputText { get; set; }
 
-    /// <summary>Raised on draft edits.</summary>
+    /// <summary>Raised when the draft changes: on each edit, and when a send clears it.</summary>
     [Parameter] public EventCallback<string> InputTextChanged { get; set; }
 
-    /// <summary>Enter sends when true; Shift+Enter always inserts a newline. Default true.</summary>
+    /// <summary>Whether Enter alone sends (Shift+Enter always inserts a newline). Default true.</summary>
     [Parameter] public bool SubmitOnEnter { get; set; } = true;
 
-    /// <summary>Placeholder text.</summary>
+    /// <summary>The textarea's placeholder.</summary>
     [Parameter] public string? Placeholder { get; set; }
 
-    /// <summary>The accessible input label.</summary>
+    /// <summary>The textarea's accessible label. Default "Message".</summary>
     [Parameter] public string InputLabel { get; set; } = "Message";
 
-    /// <summary>The send button label.</summary>
+    /// <summary>The textarea's rows. Default 1.</summary>
+    [Parameter] public int Rows { get; set; } = 1;
+
+    /// <summary>The send button's text. Default "Send".</summary>
     [Parameter] public string SendText { get; set; } = "Send";
 
-    /// <summary>The stop button label.</summary>
+    /// <summary>The stop button's text, shown in place of send while a reply is in progress. Default "Stop".</summary>
     [Parameter] public string StopText { get; set; } = "Stop";
 
-    /// <summary>Focus notification.</summary>
+    /// <summary>Raised when the textarea gets the focus.</summary>
     [Parameter] public EventCallback<FocusEventArgs> Focused { get; set; }
 
-    /// <summary>Blur notification.</summary>
+    /// <summary>Raised when the textarea loses the focus.</summary>
     [Parameter] public EventCallback<FocusEventArgs> Blurred { get; set; }
 
-    /// <summary>Additional root classes.</summary>
+    /// <summary>Extra CSS classes for the root element.</summary>
     [Parameter] public string? Class { get; set; }
 
-    /// <summary>Root inline styles.</summary>
+    /// <summary>Inline style for the root element.</summary>
     [Parameter] public string? Style { get; set; }
 
-    /// <summary>Additional root HTML attributes.</summary>
+    /// <summary>Any other attributes, applied to the root element.</summary>
     [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? Attributes { get; set; }
 
     /// <inheritdoc/>
@@ -68,12 +73,7 @@
     {
         if (!ReferenceEquals(_attached, Context))
         {
-            if (_attached is not null)
-            {
-                _attached.FocusInput = null;
-                _attached.MessageSent -= OnSent;
-            }
-
+            Detach();
             _attached = Context;
             Context.FocusInput = FocusInputAsync;
             Context.MessageSent += OnSent;
@@ -89,65 +89,76 @@
     /// <inheritdoc/>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        try
+        // The textarea stays for the composer's lifetime, so its keyboard handler is attached once (again only when
+        // SubmitOnEnter changes), not on every render.
+        if (_keyboardSubmitOnEnter == SubmitOnEnter)
         {
-        if (_keyboard is not null)
-        {
-            await _keyboard.InvokeVoidAsync("dispose");
-            await _keyboard.DisposeAsync();
-            _keyboard = null;
+            return;
         }
 
-        if (!Context.IsBusy)
+        try
         {
+            if (_keyboard is not null)
+            {
+                await _keyboard.InvokeVoidAsync("dispose");
+                await _keyboard.DisposeAsync();
+                _keyboard = null;
+            }
+
             _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/ChatStage.Blazor/chatstage.js");
             _reference ??= DotNetObjectReference.Create(this);
-            _keyboard = await _module.InvokeAsync<IJSObjectReference>("keyboard", _input, _reference, SubmitOnEnter);
-        }
+            _keyboard = _module is null ? null : await _module.InvokeAsync<IJSObjectReference>("keyboard", _input, _reference, SubmitOnEnter);
+            _keyboardSubmitOnEnter = SubmitOnEnter;
         }
         catch (JSDisconnectedException)
         {
-            // The circuit will recreate the keyboard after reconnecting.
+            // The circuit is gone; there is nothing to attach to.
         }
     }
 
     private async Task InputChangedAsync(ChangeEventArgs args)
     {
         Context.InputText = args.Value?.ToString() ?? string.Empty;
+        _lastInputText = Context.InputText;
         await InputTextChanged.InvokeAsync(Context.InputText);
     }
 
     private void OnSent(ChatStageSubmission submission) => _ = InvokeAsync(async () =>
     {
+        _lastInputText = Context.InputText;
         await InputTextChanged.InvokeAsync(Context.InputText);
         StateHasChanged();
     });
 
-    /// <summary>Submits the draft. Called by the documented keyboard module.</summary>
+    /// <summary>Sends the draft through <see cref="ChatStageSessionContext.SubmitAsync"/>. Enter calls it too.</summary>
     [JSInvokable]
-    public async Task SendAsync()
-    {
-        var send = Context.SubmitAsync();
-        await InputTextChanged.InvokeAsync(Context.InputText);
-        await send;
-    }
+    public Task SendAsync() => Context.SubmitAsync();
 
-    /// <summary>Signals Escape without cancelling a run; the app decides what Escape means.</summary>
+    /// <summary>Raises the context's <see cref="ChatStageSessionContext.Escape"/>; it does not stop a reply.</summary>
     [JSInvokable]
     public void Escape() => Context.NotifyEscape();
 
-    /// <summary>Focuses the input when the composer is idle.</summary>
-    public ValueTask FocusInputAsync() => Context.IsBusy ? ValueTask.CompletedTask : _input.FocusAsync();
+    /// <summary>Focuses the textarea.</summary>
+    public ValueTask FocusInputAsync() => _input.FocusAsync();
+
+    private void Detach()
+    {
+        if (_attached is not null)
+        {
+            if (_attached.FocusInput == FocusInputAsync)
+            {
+                _attached.FocusInput = null;
+            }
+
+            _attached.MessageSent -= OnSent;
+            _attached = null;
+        }
+    }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
-        if (_attached is not null)
-        {
-            _attached.FocusInput = null;
-            _attached.MessageSent -= OnSent;
-        }
-
+        Detach();
         try
         {
             if (_keyboard is not null)

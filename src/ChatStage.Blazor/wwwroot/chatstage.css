@@ -1,58 +1,74 @@
-/* Load after Bit's styles. These parts and variables are ChatStage's public styling contract. */
-.chatstage-headless { display:flex; flex-direction:column; min-height:0; height:100%; color:inherit; background:transparent; }
-.chatstage-transcript.bit-aimls { padding:var(--chatstage-transcript-padding, 0); background:transparent; scrollbar-color:var(--chatstage-scrollbar-thumb, auto) var(--chatstage-scrollbar-track, transparent); scrollbar-width:thin; }
+/*
+  ChatStage.Blazor: styles for the chrome-free layout (ChatStageChat Unstyled, ChatStageSession, ChatStageTranscript,
+  ChatStageMessage, ChatStageComposer). Load it after Bit's styles:
+    <link rel="stylesheet" href="_content/ChatStage.Blazor/chatstage.css" />
+  The classes and the --chatstage-* variables here are ChatStage's public styling contract (see the README).
+  It also carries the default ChatStageChat layout, so a host whose scoped-CSS bundle is not loaded keeps it.
+*/
+
+/* The default layout (also in the component's scoped CSS). */
+.chatstage { display:flex; flex-direction:column; height:100%; min-height:0; background:var(--bit-clr-bg-pri); color:var(--bit-clr-fg-pri); }
+.chatstage-header { display:flex; align-items:center; gap:12px; padding:8px 14px; border-bottom:1px solid var(--bit-clr-brd-sec); }
+.chatstage-title { flex:1; font-weight:600; }
+.chatstage-usage { font-size:.85em; opacity:.75; }
+.chatstage > :last-child { flex:1; min-height:0; }
+
+/* The chrome-free layout. */
+.chatstage-headless { display:flex; flex-direction:column; height:100%; min-height:0; color:inherit; background:transparent; }
+.chatstage-headless > .chatstage-transcript { flex:1; min-height:0; }
+
+.chatstage-transcript.bit-aimls {
+    padding:var(--chatstage-transcript-padding, 0); background:transparent;
+    scrollbar-color:var(--chatstage-scrollbar-thumb, auto) var(--chatstage-scrollbar-track, transparent);
+    scrollbar-width:var(--chatstage-scrollbar-width, thin);
+}
 .chatstage-transcript .chatstage-transcript-content { max-width:none; width:100%; gap:var(--chatstage-message-gap, .5rem); }
-.chatstage-message { display:block; padding:var(--chatstage-message-padding, 0); background:var(--chatstage-message-background, transparent); }
-.chatstage-label { display:inline; font-weight:var(--chatstage-label-weight, 600); color:var(--chatstage-label-color, inherit); }
-.chatstage-body { display:inline; color:var(--chatstage-body-color, inherit); }
-.chatstage-body > .chatstage-text, .chatstage-text > .chatstage-markdown, .chatstage-markdown > .chatstage-prose { display:inline; }
-.chatstage-prose > .chatstage-paragraph:first-child { display:inline; }
-.chatstage-prose .chatstage-paragraph { margin:var(--chatstage-paragraph-margin, 0 0 .5em); line-height:var(--chatstage-line-height, 1.5); }
-.chatstage-prose .chatstage-heading { font-size:var(--chatstage-heading-size, 1.15em); margin:var(--chatstage-heading-margin, .6em 0 .3em); }
-.chatstage-prose h1.chatstage-heading { font-size:var(--chatstage-heading-1-size, var(--chatstage-heading-size, 1.5em)); }
-.chatstage-prose h2.chatstage-heading { font-size:var(--chatstage-heading-2-size, var(--chatstage-heading-size, 1.3em)); }
-.chatstage-prose h3.chatstage-heading { font-size:var(--chatstage-heading-3-size, var(--chatstage-heading-size, 1.15em)); }
-.chatstage-prose h4.chatstage-heading, .chatstage-prose h5.chatstage-heading, .chatstage-prose h6.chatstage-heading { font-size:var(--chatstage-heading-small-size, var(--chatstage-heading-size, 1em)); }
+.chatstage-headless ::selection, .chatstage-transcript ::selection { background:var(--chatstage-selection-background, #315c85); color:var(--chatstage-selection-color, #fff); }
+
+/* A message: optional label, body, optional metadata. */
+.chatstage-message { display:block; padding:var(--chatstage-message-padding, 0); background:var(--chatstage-message-background, transparent); line-height:var(--chatstage-line-height, 1.5); }
+.chatstage-label { font-weight:var(--chatstage-label-weight, 600); color:var(--chatstage-label-color, inherit); margin-inline-end:var(--chatstage-label-gap, .25em); }
+.chatstage-message[data-role="user"] .chatstage-label { color:var(--chatstage-user-label-color, var(--chatstage-label-color, inherit)); }
+.chatstage-body { color:var(--chatstage-body-color, inherit); }
+.chatstage-metadata { font-size:var(--chatstage-metadata-size, .8em); color:var(--chatstage-metadata-color, inherit); opacity:var(--chatstage-metadata-opacity, .7); }
+
+/* A labelled message: the label runs into the first paragraph ("[Sage]: Hello..."). */
+.chatstage-message-labelled > .chatstage-label,
+.chatstage-message-labelled > .chatstage-body,
+.chatstage-message-labelled > .chatstage-body > .chatstage-text:first-child,
+.chatstage-message-labelled > .chatstage-body > .chatstage-text:first-child > .chatstage-markdown,
+.chatstage-message-labelled > .chatstage-body > .chatstage-text:first-child > .chatstage-markdown > .chatstage-prose,
+.chatstage-message-labelled > .chatstage-body > .chatstage-text:first-child .chatstage-prose > .chatstage-paragraph:first-child { display:inline; }
+
+/* Markdown. */
+.chatstage-prose .chatstage-paragraph { margin:var(--chatstage-paragraph-margin, 0 0 .5em); }
+.chatstage-prose .chatstage-heading { font-weight:var(--chatstage-heading-weight, 600); margin:var(--chatstage-heading-margin, .6em 0 .3em); }
+.chatstage-prose h1.chatstage-heading { font-size:var(--chatstage-heading-1-size, 1.5em); }
+.chatstage-prose h2.chatstage-heading { font-size:var(--chatstage-heading-2-size, 1.3em); }
+.chatstage-prose h3.chatstage-heading { font-size:var(--chatstage-heading-3-size, 1.15em); }
+.chatstage-prose :is(h4, h5, h6).chatstage-heading { font-size:var(--chatstage-heading-small-size, 1em); }
 .chatstage-prose ul { list-style-type:var(--chatstage-list-marker, disc); }
+.chatstage-prose ol { list-style-type:var(--chatstage-ordered-list-marker, decimal); }
 .chatstage-prose :is(ul, ol) { padding-inline-start:var(--chatstage-list-indent, 1.5em); margin:var(--chatstage-list-margin, .4em 0); }
-.chatstage-prose pre { background:var(--chatstage-code-background, #171717); color:var(--chatstage-code-color, inherit); padding:var(--chatstage-code-padding, .6em); border-radius:var(--chatstage-code-radius, 0); }
-.chatstage-prose code { font-family:var(--chatstage-code-font, monospace); }
-.chatstage-prose a { color:var(--chatstage-link-color, #65aaff); }
-.chatstage-metadata { font-size:var(--chatstage-metadata-size, .8em); color:var(--chatstage-metadata-color, inherit); }
-.chatstage-headless ::selection, .chatstage-transcript ::selection { background:var(--chatstage-selection-background, #315c85); color:var(--chatstage-selection-color, white); }
-.chatstage-input { color:var(--chatstage-input-color, inherit); background:var(--chatstage-input-background, transparent); caret-color:var(--chatstage-input-caret, currentColor); font:inherit; }
-.chatstage-input::placeholder { color:var(--chatstage-placeholder-color, #888); }
-.chatstage-stop { color:var(--chatstage-stop-color, inherit); background:var(--chatstage-stop-background, transparent); }
-.chatstage-tool-card { background:var(--chatstage-tool-background, transparent); border-color:var(--chatstage-tool-border, currentColor); }
+.chatstage-prose pre { background:var(--chatstage-code-background, rgba(127,127,127,.15)); color:var(--chatstage-code-color, inherit); padding:var(--chatstage-code-padding, .6em); border-radius:var(--chatstage-code-radius, 4px); overflow:auto; }
+.chatstage-prose :is(code, pre) { font-family:var(--chatstage-code-font, ui-monospace, monospace); font-size:var(--chatstage-code-size, .9em); }
+.chatstage-prose .chatstage-inline-code { background:var(--chatstage-inline-code-background, rgba(127,127,127,.15)); padding:var(--chatstage-inline-code-padding, 0 .25em); border-radius:var(--chatstage-code-radius, 4px); }
+.chatstage-prose a, .chatstage-prose .chatstage-link { color:var(--chatstage-link-color, #3b82f6); }
+.chatstage-caret { color:var(--chatstage-caret-color, currentColor); }
+
+/* Tool cards and approvals (Bit's views, with ChatStage's classes). */
+.chatstage-tool { display:block; margin:var(--chatstage-tool-margin, .4em 0); }
+.chatstage-tool-card { background:var(--chatstage-tool-background, transparent); border-color:var(--chatstage-tool-border, currentColor); color:var(--chatstage-tool-color, inherit); }
 .chatstage-approval { background:var(--chatstage-approval-background, transparent); color:var(--chatstage-approval-color, inherit); }
-.chatstage {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    min-height: 0;
-    background: var(--bit-clr-bg-pri);
-    color: var(--bit-clr-fg-pri);
-}
 
-.chatstage-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--bit-clr-brd-sec);
+/* The composer. */
+.chatstage-composer { display:flex; gap:var(--chatstage-composer-gap, .5em); align-items:flex-end; padding:var(--chatstage-composer-padding, .5em 0 0); }
+.chatstage-input {
+    flex:1; resize:none; font:inherit; color:var(--chatstage-input-color, inherit); background:var(--chatstage-input-background, transparent);
+    caret-color:var(--chatstage-input-caret, currentColor); border:var(--chatstage-input-border, 1px solid rgba(127,127,127,.4));
+    padding:var(--chatstage-input-padding, .4em .5em); border-radius:var(--chatstage-input-radius, 4px);
 }
-
-.chatstage-title {
-    flex: 1;
-    font-weight: 600;
-}
-
-.chatstage-usage {
-    font-size: 0.85em;
-    opacity: 0.75;
-}
-
-.chatstage > :last-child {
-    flex: 1;
-    min-height: 0;
-}
+.chatstage-input::placeholder { color:var(--chatstage-placeholder-color, #888); }
+.chatstage-send, .chatstage-stop { font:inherit; cursor:pointer; padding:var(--chatstage-button-padding, .4em .8em); border-radius:var(--chatstage-input-radius, 4px); border:var(--chatstage-input-border, 1px solid rgba(127,127,127,.4)); }
+.chatstage-send { color:var(--chatstage-send-color, inherit); background:var(--chatstage-send-background, transparent); }
+.chatstage-stop { color:var(--chatstage-stop-color, inherit); background:var(--chatstage-stop-background, transparent); }

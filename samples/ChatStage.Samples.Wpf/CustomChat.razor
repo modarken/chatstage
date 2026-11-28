@@ -1,21 +1,92 @@
-@* A complete flat layout using only released public components; transport and approvals stay unchanged. *@
-<ChatStageSession @ref="_owner" @bind-Conversation="_conversation">
+@* A fully custom, flat layout built only from ChatStage's public API: inline [You]/[Assistant] labels, no header,
+   bubbles or avatars, an app-owned slash-command popup, and only a Stop button while a reply streams. The transport,
+   Markdown, tool cards and secure approvals are the standard ones. *@
+<ChatStageSession @ref="_session" @bind-Conversation="_conversation">
     <ChildContent Context="chat">
         <section class="chatstage-headless custom-chat" aria-label="Custom assistant">
-            <button type="button" @onclick="NewAsync">New conversation</button>
+            <div class="custom-chat-bar">
+                <button type="button" @onclick="NewAsync">New conversation</button>
+            </div>
             <ChatStageTranscript>
-                <EmptyTemplate><p>Ask the demo agent. Try “Delete the demo item” for a secure approval.</p></EmptyTemplate>
-                <LabelTemplate Context="message">[@(message.Role == BitAiRole.User ? "You" : "Assistant")]: </LabelTemplate>
+                <EmptyTemplate><p class="custom-chat-empty">Ask the demo agent. Try /time, or “Delete the demo item” for a secure approval.</p></EmptyTemplate>
+                <LabelTemplate Context="message">[@(message.Role.IsUser ? "You" : "Assistant")]:</LabelTemplate>
             </ChatStageTranscript>
-            @* This composer renders only Stop while busy. Replace it with any app-owned input;
-               bind chat.InputText and call chat.SubmitAsync(text, attachments, cancellationToken). *@
-            <ChatStageComposer Placeholder="Message the demo agent" SubmitOnEnter="true" />
+            @if (chat.IsBusy)
+            {
+                <div class="chatstage-composer">
+                    <button type="button" class="chatstage-stop" @onclick="chat.Stop">Stop</button>
+                </div>
+            }
+            else
+            {
+                @if (_commands.Count > 0)
+                {
+                    <ul class="custom-chat-commands" role="listbox" aria-label="Commands">
+                        @foreach (var command in _commands)
+                        {
+                            <li role="option" @onclick="() => PickAsync(chat, command.Name)">@command.Name <span>@command.Prompt</span></li>
+                        }
+                    </ul>
+                }
+                <ChatStageComposer InputText="@chat.InputText" InputTextChanged="text => Typed(text)"
+                                   Placeholder="Message the demo agent, or type /" SendText="Send" />
+            }
         </section>
     </ChildContent>
 </ChatStageSession>
 
 @code {
-    private ChatStageSession? _owner;
+    private static readonly (string Name, string Prompt)[] Commands =
+    [
+        ("/time", "What time is it?"),
+        ("/markdown", "Show me markdown"),
+        ("/delete", "Delete the demo item"),
+    ];
+
+    private ChatStageSession? _session;
+    private ChatStageSessionContext? _hooked;
     private BitAiConversation _conversation = new(Guid.NewGuid().ToString("N"));
-    private Task NewAsync() => _owner?.NewConversationAsync() ?? Task.CompletedTask;
+    private IReadOnlyList<(string Name, string Prompt)> _commands = [];
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Hook the context of the current thread (it changes with New conversation).
+        if (_session?.Context is { } context && !ReferenceEquals(context, _hooked))
+        {
+            _hooked = context;
+            context.Submitting = ExpandCommandAsync;
+            context.Escape += () => InvokeAsync(() => { _commands = []; StateHasChanged(); });
+        }
+    }
+
+    // Slash commands are expanded before the prompt is sent; the draft is kept if a command is unknown.
+    private static Task ExpandCommandAsync(ChatStageSubmission submission, CancellationToken cancellationToken)
+    {
+        if (submission.Text.StartsWith('/'))
+        {
+            var match = Commands.FirstOrDefault(c => c.Name == submission.Text.Trim());
+            if (match.Prompt is null)
+            {
+                submission.Cancel = true;
+            }
+            else
+            {
+                submission.Text = match.Prompt;
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void Typed(string text) =>
+        _commands = text.StartsWith('/') ? [.. Commands.Where(c => c.Name.StartsWith(text.Trim(), StringComparison.OrdinalIgnoreCase))] : [];
+
+    private async Task PickAsync(ChatStageSessionContext chat, string command)
+    {
+        _commands = [];
+        chat.InputText = command;
+        await chat.FocusInputAsync();
+    }
+
+    private Task NewAsync() => _session?.NewConversationAsync() ?? Task.CompletedTask;
 }

@@ -32,7 +32,7 @@ public static class ChatStageServiceCollectionExtensions
 
         services.AddOptions<ChatStageOptions>()
             .Configure(configure)
-            .Validate(o => o.RenderInterval >= TimeSpan.Zero, "RenderInterval must not be negative.")
+            .Validate(o => o.RenderInterval is not { } interval || interval >= TimeSpan.Zero, $"{nameof(ChatStageOptions)}.{nameof(ChatStageOptions.RenderInterval)} must not be negative.")
             .Validate(o => o.Endpoint is { IsAbsoluteUri: true }, $"{nameof(ChatStageOptions)}.{nameof(ChatStageOptions.Endpoint)} must be an absolute URI.")
             .ValidateOnStart();
 

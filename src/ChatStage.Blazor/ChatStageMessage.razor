@@ -1,7 +1,7 @@
 @namespace ChatStage
 @implements IDisposable
 
-<article @attributes="Attributes" class="chatstage-message @Class" style="@Style" data-role="@Message.Role.ToString().ToLowerInvariant()">
+<article @attributes="Attributes" class="@RootClass" style="@Style" data-role="@Message.Role.ToString().ToLowerInvariant()">
     @if (LabelTemplate is not null)
     {
         <span class="chatstage-label">@LabelTemplate(Message)</span>
@@ -37,6 +37,8 @@
 
 @code {
     private BitAiMessage? _attached;
+
+    private string RootClass => "chatstage-message" + (LabelTemplate is null ? "" : " chatstage-message-labelled") + (string.IsNullOrWhiteSpace(Class) ? "" : " " + Class);
 
     /// <inheritdoc/>
     protected override void OnParametersSet()
