@@ -1,0 +1,31 @@
+/* The look comes from ChatStage's documented CSS variables; nothing here depends on Bit's internal markup. */
+.custom-chat {
+    padding: 8px 12px;
+    font-family: Consolas, "Cascadia Mono", monospace;
+    --chatstage-transcript-padding: 4px 0;
+    --chatstage-message-gap: .35rem;
+    --chatstage-label-color: #f5c542;
+    --chatstage-user-label-color: #7bbcff;
+    --chatstage-heading-1-size: 1.15em;
+    --chatstage-heading-2-size: 1.1em;
+    --chatstage-heading-3-size: 1.05em;
+    --chatstage-list-marker: square;
+    --chatstage-list-indent: 1.25em;
+    --chatstage-link-color: #7bbcff;
+    --chatstage-code-background: rgba(0, 0, 0, .35);
+    --chatstage-input-border: 1px solid rgba(255, 255, 255, .25);
+}
+
+.custom-chat-bar { display: flex; justify-content: flex-end; }
+.custom-chat-empty { opacity: .7; }
+
+.custom-chat-commands {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    border: 1px solid rgba(255, 255, 255, .25);
+}
+
+.custom-chat-commands li { padding: 2px 8px; cursor: pointer; }
+.custom-chat-commands li:hover { background: rgba(255, 255, 255, .1); }
+.custom-chat-commands span { opacity: .6; margin-inline-start: 1em; }

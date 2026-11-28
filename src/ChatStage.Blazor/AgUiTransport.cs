@@ -39,6 +39,54 @@ public sealed partial class AgUiTransport : IBitAiTransport, IBitAiApprovalTrans
 
     // Interrupts a cancelled turn left unanswered, per thread: the next run declines them so the thread stays usable.
     private readonly ConcurrentDictionary<string, List<PendingApproval>> _abandoned = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, IReadOnlyList<ChatStagePendingApproval>> _restoring = new(StringComparer.Ordinal);
+
+    /// <summary>Shows restored standard approval cards, then resumes the server only after they are answered.</summary>
+    /// <remarks>The session must use this transport and be idle. Supply only interrupts belonging to its thread.
+    /// Displayed names and arguments are never submitted as execution authority; the server must bind the recorded call.</remarks>
+    /// <param name="session">The idle session whose conversation id identifies the saved thread.</param>
+    /// <param name="approvals">Interrupts loaded from authenticated server history.</param>
+    /// <param name="cancellationToken">Cancels waiting and the resumed run.</param>
+    /// <returns>The reply once approval and its resumed run finish.</returns>
+    public async Task<BitAiMessage?> RestoreApprovalsAsync(BitAiChatSession session, IReadOnlyList<ChatStagePendingApproval> approvals, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(approvals);
+        if (session.IsGenerating || approvals.Count == 0)
+        {
+            throw new InvalidOperationException("Restore at least one approval into an idle session.");
+        }
+
+        foreach (var approval in approvals)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(approval.Id);
+            ArgumentException.ThrowIfNullOrWhiteSpace(approval.ToolCallId);
+            ArgumentException.ThrowIfNullOrWhiteSpace(approval.Name);
+        }
+
+        if (approvals.Select(a => a.ToolCallId).Distinct(StringComparer.Ordinal).Count() != approvals.Count ||
+            approvals.Select(a => a.Id).Distinct(StringComparer.Ordinal).Count() != approvals.Count)
+        {
+            throw new ArgumentException("Interrupt and tool call ids must be unique.", nameof(approvals));
+        }
+
+        var thread = session.Conversation.ConversationId;
+        if (!_restoring.TryAdd(thread, approvals.ToArray()))
+        {
+            throw new InvalidOperationException("This thread already has a restoration in progress.");
+        }
+
+        try
+        {
+            // Regenerate only this empty placeholder, preserving every hydrated history message.
+            var placeholder = session.Conversation.AddMessage(new BitAiMessage(BitAiRole.Assistant));
+            return await session.RegenerateAsync(placeholder.MessageId, cancellationToken);
+        }
+        finally
+        {
+            _restoring.TryRemove(thread, out _);
+        }
+    }
 
     /// <summary>Creates the transport. Normally resolved from dependency injection; see <c>AddChatStage</c>.</summary>
     /// <param name="http">The HTTP client to post runs with (its handlers add any authentication).</param>
@@ -69,9 +117,10 @@ public sealed partial class AgUiTransport : IBitAiTransport, IBitAiApprovalTrans
         ArgumentNullException.ThrowIfNull(request);
         var threadId = request.ConversationId ?? Guid.NewGuid().ToString("N");
         var turn = new Turn();
-        List<AGUIMessage> messages = _options.ServerKeepsHistory
-            ? AgUiMapping.ToAgUiMessages(AgUiMapping.NewMessages(request.Messages))
-            : AgUiMapping.ToAgUiMessages(request.Messages);
+        _restoring.TryRemove(threadId, out var restored);
+        var outgoing = (_options.ServerKeepsHistory ? AgUiMapping.NewMessages(request.Messages) : request.Messages).ToList();
+        var loaded = restored is null ? await AgUiMapping.LoadAttachmentsAsync(outgoing, cancellationToken).ConfigureAwait(false) : null;
+        List<AGUIMessage> messages = AgUiMapping.ToAgUiMessages(outgoing, loaded);
         IList<AGUIResume>? resume = _abandoned.TryRemove(threadId, out var abandoned)
             ? [.. abandoned.Select(a => AgUiMapping.Resume(a, approved: false))]
             : null;
@@ -94,8 +143,9 @@ public sealed partial class AgUiTransport : IBitAiTransport, IBitAiApprovalTrans
             RunFinishedEvent? finished = null;
             BitAiError? failure = null;
 
-            await using (var events = RunAsync(input, isResume, cancellationToken).GetAsyncEnumerator(cancellationToken))
+            await using (var events = ReadRunAsync(input, isResume, restored, cancellationToken).GetAsyncEnumerator(cancellationToken))
             {
+                restored = null;
                 while (true)
                 {
                     BaseEvent current;
@@ -257,6 +307,34 @@ public sealed partial class AgUiTransport : IBitAiTransport, IBitAiApprovalTrans
             {
                 yield return e;
             }
+        }
+    }
+
+    private async IAsyncEnumerable<BaseEvent> ReadRunAsync(RunAgentInput input, bool retryable, IReadOnlyList<ChatStagePendingApproval>? restored, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        if (restored is not null)
+        {
+            foreach (var approval in restored)
+            {
+                yield return new ToolCallStartEvent { ToolCallId = approval.ToolCallId, ToolCallName = approval.Name };
+                yield return new ToolCallArgsEvent { ToolCallId = approval.ToolCallId, Delta = approval.Arguments.GetRawText() };
+                yield return new ToolCallEndEvent { ToolCallId = approval.ToolCallId };
+            }
+
+            yield return new RunFinishedEvent
+            {
+                ThreadId = input.ThreadId, RunId = input.RunId,
+                Outcome = new RunFinishedInterruptOutcome
+                {
+                    Interrupts = [.. restored.Select(a => new AGUIInterrupt { Id = a.Id, ToolCallId = a.ToolCallId, Reason = "tool_call", Message = a.Message })]
+                }
+            };
+            yield break;
+        }
+
+        await foreach (var evt in RunAsync(input, retryable, cancellationToken).ConfigureAwait(false))
+        {
+            yield return evt;
         }
     }
 

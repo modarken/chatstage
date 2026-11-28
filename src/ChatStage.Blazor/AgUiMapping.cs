@@ -36,7 +36,7 @@ internal static class AgUiMapping
     /// Bit's transcript as AG-UI messages: user turns, assistant turns with their tool calls, and tool results. Messages the
     /// app showed are left out.
     /// </summary>
-    public static List<AGUIMessage> ToAgUiMessages(IEnumerable<IBitAiMessage> transcript)
+    public static List<AGUIMessage> ToAgUiMessages(IEnumerable<IBitAiMessage> transcript, IReadOnlyDictionary<string, byte[]>? loaded = null)
     {
         var list = new List<AGUIMessage>();
         foreach (var message in transcript)
@@ -48,7 +48,7 @@ internal static class AgUiMapping
 
             if (message.Role.IsUser)
             {
-                list.Add(new AGUIUserMessage { Id = message.MessageId, Content = new AGUIContent(message.GetText()) });
+                list.Add(new AGUIUserMessage { Id = message.MessageId, Content = UserContent(message, loaded) });
                 continue;
             }
 
@@ -78,6 +78,53 @@ internal static class AgUiMapping
         }
 
         return list;
+    }
+
+    private static AGUIContent UserContent(IBitAiMessage message, IReadOnlyDictionary<string, byte[]>? loaded)
+    {
+        if (message.Attachments.Count == 0)
+        {
+            return new AGUIContent(message.GetText());
+        }
+
+        var parts = new List<AGUIInputContent> { new AGUITextInputContent { Text = message.GetText() } };
+        foreach (var attachment in message.Attachments)
+        {
+            AGUIInputContentSource source = attachment.Url is { Length: > 0 } url
+                ? new AGUIInputContentUrlSource { Value = url, MimeType = attachment.ContentType }
+                : (attachment.Data ?? (loaded is not null && loaded.TryGetValue(attachment.AttachmentId, out var bytes) ? bytes : null)) is { } data
+                    ? new AGUIInputContentDataSource { Value = Convert.ToBase64String(data.Span), MimeType = attachment.ContentType ?? "application/octet-stream" }
+                    : throw new InvalidOperationException($"Attachment '{attachment.Name}' has no URL and no content to send.");
+            AGUIMediaInputContent part = attachment.Kind switch
+            {
+                BitAiAttachmentKind.Image => new AGUIImageInputContent { Source = source },
+                BitAiAttachmentKind.Audio => new AGUIAudioInputContent { Source = source },
+                BitAiAttachmentKind.Video => new AGUIVideoInputContent { Source = source },
+                _ => new AGUIDocumentInputContent { Source = source }
+            };
+            parts.Add(part);
+        }
+
+        return new AGUIContent(parts);
+    }
+
+    /// <summary>
+    /// Reads the content of the user attachments that have neither a URL nor inline data (a file the composer staged), so
+    /// they can be sent inline. Keyed by attachment id; <see langword="null"/> when there is nothing to read.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<string, byte[]>?> LoadAttachmentsAsync(IEnumerable<IBitAiMessage> messages, CancellationToken cancellationToken)
+    {
+        Dictionary<string, byte[]>? loaded = null;
+        foreach (var attachment in messages.Where(m => m.Role.IsUser && !ChatStageActions.IsAppMessage(m)).SelectMany(m => m.Attachments))
+        {
+            if (attachment.Url is not { Length: > 0 } && attachment.Data is null && attachment.ContentFactory is not null)
+            {
+                loaded ??= new(StringComparer.Ordinal);
+                loaded[attachment.AttachmentId] = await attachment.ReadAllBytesAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return loaded;
     }
 
     /// <summary>

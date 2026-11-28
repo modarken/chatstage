@@ -3,35 +3,92 @@
 @inject BitAiChatSessionFactory SessionFactory
 @inject IOptions<ChatStageOptions> Options
 @inject ChatStageComponentRegistry Components
+@inject BitAiUiOptions RegisteredUi
 
-<div class="chatstage" data-testid="chatstage">
-    <header class="chatstage-header">
-        <span class="chatstage-title">@Title</span>
-        @HeaderContent
-        @if (ShowContextMeter)
+<div @attributes="Attributes" class="@RootClass" style="@Style" data-testid="chatstage">
+    @if (ShowHeader)
+    {
+        @if (HeaderTemplate is not null)
         {
-            <BitAiContextMeter Conversation="Conversation" Window="Options.Value.ContextWindow" data-testid="chatstage-context-meter" />
+            @HeaderTemplate
         }
-        @if (ShowUsage && UsageText is { } usage)
+        else
         {
-            <span class="chatstage-usage" data-testid="chatstage-usage">@usage</span>
+            <header class="chatstage-header">
+                <span class="chatstage-title">@Title</span>
+                @HeaderContent
+                @if (ShowContextMeter)
+                {
+                    <BitAiContextMeter Conversation="Current" Window="Options.Value.ContextWindow" data-testid="chatstage-context-meter" />
+                }
+                @if (ShowUsage && UsageText is { } usage)
+                {
+                    <span class="chatstage-usage" data-testid="chatstage-usage">@usage</span>
+                }
+            </header>
         }
-    </header>
-    <BitAiChat Conversation="Conversation"
-               Session="_session"
-               EmptyTitle="@EmptyTitle"
-               EmptyDescription="@EmptyDescription"
-               Suggestions="Suggestions"
-               Placeholder="@Placeholder" />
+    }
+    @if (_context is { } context)
+    {
+        <CascadingValue Value="context">
+            @if (TranscriptTemplate is not null)
+            {
+                @TranscriptTemplate(context)
+                @ComposerTemplate?.Invoke(context)
+            }
+            else if (Unstyled)
+            {
+                <ChatStageTranscript MessageTemplate="MessageTemplate" EmptyTemplate="EmptyTemplate" UiOptions="_ui" />
+                @if (ComposerTemplate is not null)
+                {
+                    @ComposerTemplate(context)
+                }
+                else
+                {
+                    <ChatStageComposer Placeholder="@Placeholder" SubmitOnEnter="_ui.SubmitOnEnter" />
+                }
+            }
+            else
+            {
+                <BitAiChat @ref="_chat" Conversation="Current"
+                           Session="_session"
+                           EmptyTitle="@EmptyTitle"
+                           EmptyDescription="@EmptyDescription"
+                           Suggestions="@(ShowSuggestions ? Suggestions : null)"
+                           AllowAttachments="ShowAttachments"
+                           UiOptions="_ui"
+                           MessageTemplate="MessageTemplate"
+                           EmptyTemplate="EmptyTemplate"
+                           Classes="Classes" Styles="Styles"
+                           ComposerTemplate="@(ComposerTemplate is null ? null : ComposerTemplate(context))"
+                           Placeholder="@Placeholder" />
+            }
+        </CascadingValue>
+    }
 </div>
 
 @code {
     private BitAiChatSession? _session;
+    private BitAiConversation? _parameter;
     private BitAiConversation? _subscribed;
+    private ChatStageSessionContext? _context;
+    private BitAiChat? _chat;
+    private ChatStageRenderSubscription? _renders;
+    private BitAiUiOptions? _uiParameter;
+    private BitAiUiOptions _ui = BitAiUiOptions.Default;
+
+    // The conversation shown: the parameter's, or the one NewConversationAsync started.
+    private BitAiConversation Current => _subscribed ?? Conversation;
+
+    private string RootClass => (Unstyled ? "chatstage-headless" : "chatstage") + (string.IsNullOrWhiteSpace(Class) ? "" : " " + Class);
 
     /// <summary>The conversation to show. Its id is the AG-UI thread id. When not set, a new conversation is started.</summary>
+    /// <remarks>A different instance switches threads: the old session is stopped and disposed.</remarks>
     [Parameter]
     public BitAiConversation Conversation { get; set; } = new(Guid.NewGuid().ToString("N"));
+
+    /// <summary>Receives the new conversation started by <see cref="NewConversationAsync"/>, for <c>@bind-Conversation</c>.</summary>
+    [Parameter] public EventCallback<BitAiConversation> ConversationChanged { get; set; }
 
     /// <summary>The title in the header.</summary>
     [Parameter]
@@ -65,6 +122,57 @@
     [Parameter]
     public bool ShowUsage { get; set; } = true;
 
+    /// <summary>Whether to show the header (title, <see cref="HeaderContent"/>, context meter, usage). Default true.</summary>
+    [Parameter] public bool ShowHeader { get; set; } = true;
+
+    /// <summary>Whether to offer <see cref="Suggestions"/> before the first message. Default true.</summary>
+    [Parameter] public bool ShowSuggestions { get; set; } = true;
+
+    /// <summary>Whether the default composer offers attachments. Default true. A custom composer owns its attachments.</summary>
+    [Parameter] public bool ShowAttachments { get; set; } = true;
+
+    /// <summary>
+    /// Opt in to the chrome-free layout: <see cref="ChatStageTranscript"/> and <see cref="ChatStageComposer"/> in place of
+    /// Bit's chat (no bubbles, avatars, toolbars or timestamps). Default false.
+    /// </summary>
+    [Parameter] public bool Unstyled { get; set; }
+
+    /// <summary>
+    /// Bit's presentation options for this chat (timestamps, message actions, Enter behavior, image policy...), in place
+    /// of <see cref="ChatStageOptions.UiOptions"/>.
+    /// </summary>
+    [Parameter] public BitAiUiOptions? UiOptions { get; set; }
+
+    /// <summary>Replaces the header. <see cref="ShowHeader"/> still turns it off.</summary>
+    [Parameter] public RenderFragment? HeaderTemplate { get; set; }
+
+    /// <summary>Replaces the transcript and the composer: renders this, then <see cref="ComposerTemplate"/> if set.</summary>
+    [Parameter] public RenderFragment<ChatStageSessionContext>? TranscriptTemplate { get; set; }
+
+    /// <summary>Replaces each message. <see cref="ChatStageMessage"/> keeps the default parts without the bubble.</summary>
+    [Parameter] public RenderFragment<BitAiMessage>? MessageTemplate { get; set; }
+
+    /// <summary>Replaces the composer; it is handed the context (draft, submit, stop, focus and Escape hooks).</summary>
+    [Parameter] public RenderFragment<ChatStageSessionContext>? ComposerTemplate { get; set; }
+
+    /// <summary>Replaces what is shown before the first message.</summary>
+    [Parameter] public RenderFragment? EmptyTemplate { get; set; }
+
+    /// <summary>CSS classes for the parts of Bit's chat (the default layout).</summary>
+    [Parameter] public BitAiChatClassStyles? Classes { get; set; }
+
+    /// <summary>Inline styles for the parts of Bit's chat (the default layout).</summary>
+    [Parameter] public BitAiChatClassStyles? Styles { get; set; }
+
+    /// <summary>Extra CSS classes for the root element.</summary>
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Inline style for the root element.</summary>
+    [Parameter] public string? Style { get; set; }
+
+    /// <summary>Any other attributes, applied to the root element.</summary>
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? Attributes { get; set; }
+
     /// <summary>The chat session, for code that drives the chat (approvals, sending). Set once the component has initialized.</summary>
     public BitAiChatSession? Session => _session;
 
@@ -74,47 +182,81 @@
     /// </summary>
     public ChatStageActions Actions => ChatStageActions.For(_session, Components);
 
-    private string? UsageText => Conversation.LastMessage?.Metadata?.Usage is { IsEmpty: false } u
+    /// <summary>The chat's <see cref="ChatStageSessionContext"/> (draft, submit, stop, focus), set once initialized.</summary>
+    public ChatStageSessionContext? Context => _context;
+
+    /// <summary>Stops the current reply.</summary>
+    public void Stop() => _context?.Stop();
+
+    /// <summary>Focuses the composer: a custom one that registered with the context, else the default one.</summary>
+    public ValueTask FocusInputAsync() => _context?.FocusInput is not null
+        ? _context.FocusInputAsync() : _chat?.FocusComposerAsync() ?? ValueTask.CompletedTask;
+
+    /// <summary>Starts a new thread: stops and disposes the current session and raises <see cref="ConversationChanged"/>.</summary>
+    public async Task NewConversationAsync()
+    {
+        var conversation = new BitAiConversation(Guid.NewGuid().ToString("N"));
+        await AttachAsync(conversation);
+        await ConversationChanged.InvokeAsync(conversation);
+        StateHasChanged();
+    }
+
+    private string? UsageText => Current.LastMessage?.Metadata?.Usage is { IsEmpty: false } u
         ? $"{(u.InputTokens ?? 0) + (u.OutputTokens ?? 0):N0} tokens"
         : null;
 
     /// <inheritdoc/>
     protected override async Task OnParametersSetAsync()
     {
-        if (ReferenceEquals(_subscribed, Conversation))
+        if (_session is null || !ReferenceEquals(_uiParameter, UiOptions))
+        {
+            // Resolved once, so Bit's views are handed the same options instance on every render.
+            _uiParameter = UiOptions;
+            _ui = UiOptions ?? Options.Value.ResolveUi(RegisteredUi);
+        }
+
+        // Only a new parameter value switches threads, so a parent that does not bind keeps a thread started here.
+        if (_session is null || !ReferenceEquals(_parameter, Conversation))
+        {
+            _parameter = Conversation;
+            await AttachAsync(Conversation);
+        }
+    }
+
+    private async Task AttachAsync(BitAiConversation conversation)
+    {
+        if (ReferenceEquals(_subscribed, conversation))
         {
             return;
         }
 
-        if (_subscribed is not null)
+        await DetachAsync();
+        _session = SessionFactory.Create(conversation, SessionFactory.Defaults);
+        ChatStageActions.For(_session, Components); // so ShowAsync checks and serializes with the app's registrations
+        _context = new(_session, Options.Value);
+        _renders = new(_context, _ui.RenderInterval, () => InvokeAsync(StateHasChanged));
+        _subscribed = conversation;
+    }
+
+    private async ValueTask DetachAsync()
+    {
+        if (_renders is not null)
         {
-            _subscribed.Changed -= OnConversationChanged;
+            await _renders.DisposeAsync();
+            _renders = null;
         }
 
+        _context?.Dispose();
+        _context = null;
         if (_session is not null)
         {
             await _session.DisposeAsync();
+            _session = null;
         }
 
-        _session = SessionFactory.Create(Conversation, SessionFactory.Defaults);
-        ChatStageActions.For(_session, Components); // so ShowAsync checks and serializes with the app's registrations
-        Conversation.Changed += OnConversationChanged;
-        _subscribed = Conversation;
+        _subscribed = null;
     }
-
-    private void OnConversationChanged(BitAiConversation conversation) => _ = InvokeAsync(StateHasChanged);
 
     /// <inheritdoc/>
-    public async ValueTask DisposeAsync()
-    {
-        if (_subscribed is not null)
-        {
-            _subscribed.Changed -= OnConversationChanged;
-        }
-
-        if (_session is not null)
-        {
-            await _session.DisposeAsync();
-        }
-    }
+    public ValueTask DisposeAsync() => DetachAsync();
 }

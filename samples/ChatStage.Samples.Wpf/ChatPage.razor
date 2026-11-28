@@ -1,5 +1,12 @@
 @inject BitThemeManager Theme
 
+<button type="button" @onclick="() => _custom = !_custom">@(_custom ? "Default layout" : "Custom layout")</button>
+@if (_custom)
+{
+    <CustomChat />
+}
+else
+{
 <ChatStageChat Title="ChatStage sample"
                EmptyTitle="Ask the demo agent"
                Suggestions="_suggestions"
@@ -8,10 +15,12 @@
         <button class="theme-toggle" @onclick="ToggleThemeAsync">@(_dark ? "Light" : "Dark")</button>
     </HeaderContent>
 </ChatStageChat>
+}
 
 @code {
     private readonly IReadOnlyList<string> _suggestions = ["Show me markdown", "What time is it?", "Delete the demo item", "Find a listing"];
     private bool _dark = true;
+    private bool _custom;
 
     protected override async Task OnInitializedAsync() => await Theme.SetThemeAsync(BitThemeName.FluentDark);
 

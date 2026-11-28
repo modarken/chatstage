@@ -4,7 +4,7 @@
         xmlns:blazor="clr-namespace:Microsoft.AspNetCore.Components.WebView.Wpf;assembly=Microsoft.AspNetCore.Components.WebView.Wpf"
         xmlns:local="clr-namespace:ChatStage.Samples.Wpf"
         Title="ChatStage WPF sample" Height="760" Width="900">
-    <blazor:BlazorWebView HostPage="wwwroot/index.html" Services="{DynamicResource services}">
+    <blazor:BlazorWebView UseCompositionControl="True" HostPage="wwwroot/index.html" Services="{DynamicResource services}">
         <blazor:BlazorWebView.RootComponents>
             <blazor:RootComponent Selector="#app" ComponentType="{x:Type local:ChatPage}" />
         </blazor:BlazorWebView.RootComponents>

@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-preview.1] - 2026-11-27
+
+### Added
+
+- `ChatStage.Blazor`: custom layouts from public building blocks. `<ChatStageSession>` (renderless) hands its layout a
+  `ChatStageSessionContext`: conversation, session, actions, `IsBusy`, `PendingApprovals`, `Changed`, the draft
+  (`InputText`), `SubmitAsync` with `Submitting` interception (change the prompt or attachments, or cancel),
+  `MessageSent`, `Escape`, `Stop`, `FocusInputAsync` and `ReplaceMessageText`. `ChatStageTranscript`,
+  `ChatStageMessage` (flat, with an inline `LabelTemplate`) and `ChatStageComposer` keep streaming Markdown, your
+  components and the standard tool cards and approvals. `NewConversationAsync` and thread switching by `Conversation`.
+- `ChatStageChat`: `Unstyled` (the chrome-free layout), `TranscriptTemplate`, `MessageTemplate`, `ComposerTemplate`,
+  `HeaderTemplate`, `EmptyTemplate`, `Classes`/`Styles`, `ShowHeader`, `ShowSuggestions`, `ShowAttachments`,
+  `UiOptions`, `Class`, `Style` and attribute pass-through, `Context`, `Stop()`, `FocusInputAsync()`,
+  `NewConversationAsync()` and `ConversationChanged`.
+- `_content/ChatStage.Blazor/chatstage.css`: documented CSS classes and `--chatstage-*` variables (transcript, scrollbars,
+  selection, labels, Markdown, code, links, tool cards, approvals, composer, Stop).
+- `ChatStageOptions.FinalText`: a `CUSTOM` event can replace a streamed reply's text with the server's final text.
+- `AgUiTransport.RestoreApprovalsAsync`: shows the standard Allow / Decline cards for approvals the app restored after a
+  reload, and resumes only with the recorded interrupt and tool call ids once answered.
+- `ChatStageOptions.UiOptions` (Bit's `BitAiUiOptions`, such as the image policy) and `ChatStageOptions.RenderInterval`.
+- README: custom layouts, styling, final text, restored approvals, image policy, hosting under a sub-path with its CSP,
+  and transparent WPF windows with `BlazorWebView.UseCompositionControl`.
+- Samples: a custom flat layout in the WPF sample, and `ChatStage.Samples.OverlayProbe`, which measures rendering.
+
+### Changed
+
+- `ChatStageChat` renders its own layout through one Bit `BitAiRenderScheduler`, never for a streamed delta and at once
+  for tool, approval, error, usage and completion events (it rendered on every conversation change). Measured in the
+  README.
+- User messages with attachments send them to the agent as AG-UI content parts (by URL, inline data, or the staged
+  file's content); they were left out.
+- `AgUiTransport` is registered in dependency injection (scoped, as Bit's transport is), so app code can inject it.
+
+### Fixed
+
+- A terminal `RUN_ERROR` leaves the session, the conversation and a layout's busy state idle (covered by tests; the
+  stuck flag could not be reproduced with the pinned packages).
+
 ## [0.2.0-preview.1] - 2026-11-27
 
 ### Added
@@ -52,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bit.BlazorUI and Bit.BlazorUI.AI pinned to exactly `11.0.0-pre-25` (prerelease).
 - Microsoft.Agents.AI.Hosting.AGUI.AspNetCore `1.28.0-preview.261106.1` (preview).
 
-[Unreleased]: https://github.com/modarken/chatstage/compare/v0.2.0-preview.1...HEAD
+[Unreleased]: https://github.com/modarken/chatstage/compare/v0.3.0-preview.1...HEAD
+[0.3.0-preview.1]: https://github.com/modarken/chatstage/compare/v0.2.0-preview.1...v0.3.0-preview.1
 [0.2.0-preview.1]: https://github.com/modarken/chatstage/compare/v0.1.0-preview.1...v0.2.0-preview.1
 [0.1.0-preview.1]: https://github.com/modarken/chatstage/releases/tag/v0.1.0-preview.1

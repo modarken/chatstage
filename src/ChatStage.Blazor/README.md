@@ -20,6 +20,10 @@ services.AddChatStage(o => o.Endpoint = new Uri("https://localhost:5001/agent"))
 - Messages a component sends while the agent is replying are queued, not dropped.
 - `ShowAsync` shows your own component in the transcript from app code, with no agent run; it is never sent to the agent.
 - A failed run shows the AG-UI `RUN_ERROR` message, so any server can tell the user what went wrong.
+- Your own layout: `<ChatStageSession>` with `ChatStageTranscript`, `ChatStageMessage` and `ChatStageComposer` (or
+  `<ChatStageChat Unstyled>`), styled through documented CSS classes and `--chatstage-*` variables, with the standard
+  streaming, tool cards and approvals.
+- Final text from a custom event, approval cards restored after a reload, and Bit's `UiOptions` through `ChatStageOptions`.
 
 Bit.BlazorUI is a prerelease series; this package pins one exact build of it.
 

@@ -1,0 +1,124 @@
+@namespace ChatStage
+@implements IDisposable
+
+<article @attributes="Attributes" class="@RootClass" style="@Style" data-role="@Message.Role.ToString().ToLowerInvariant()">
+    @if (LabelTemplate is not null)
+    {
+        <span class="chatstage-label">@LabelTemplate(Message)</span>
+    }
+    <div class="chatstage-body">
+        @foreach (var part in Message.Parts)
+        {
+            @if (PartTemplate is not null)
+            {
+                @PartTemplate(new(part, Message, Context.Conversation, Context.Session))
+            }
+            else if (part is BitAiToolCallPart tool)
+            {
+                <div class="chatstage-tool">
+                    <BitAiToolCallView @key="part" Call="tool" Message="Message" Session="Context.Session" Classes="ToolClasses" Styles="ToolStyles" />
+                </div>
+            }
+            else if (part is BitAiTextPart text)
+            {
+                <BitAiTextPartView @key="part" Part="text" Message="Message" Classes="TextClasses" Styles="TextStyles" />
+            }
+            else
+            {
+                <BitAiMessagePartView @key="part" Part="part" Message="Message" Conversation="Context.Conversation" Session="Context.Session" />
+            }
+        }
+    </div>
+    @if (MetadataTemplate is not null)
+    {
+        <div class="chatstage-metadata">@MetadataTemplate(Message)</div>
+    }
+</article>
+
+@code {
+    private BitAiMessage? _attached;
+
+    private string RootClass => "chatstage-message" + (LabelTemplate is null ? "" : " chatstage-message-labelled") + (string.IsNullOrWhiteSpace(Class) ? "" : " " + Class);
+
+    /// <inheritdoc/>
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_attached, Message))
+        {
+            return;
+        }
+
+        Dispose();
+        _attached = Message;
+        _attached.Changed += OnMessageChanged;
+    }
+
+    private void OnMessageChanged(BitAiMessage message) => _ = InvokeAsync(StateHasChanged);
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if (_attached is not null)
+        {
+            _attached.Changed -= OnMessageChanged;
+            _attached = null;
+        }
+    }
+
+    /// <summary>The owning renderless session context.</summary>
+    [CascadingParameter] public ChatStageSessionContext Context { get; set; } = default!;
+
+    /// <summary>The message to render without bubbles, avatars, timestamps or toolbars.</summary>
+    [Parameter, EditorRequired] public BitAiMessage Message { get; set; } = default!;
+
+    /// <summary>An optional inline label, such as [You]:.</summary>
+    [Parameter] public RenderFragment<BitAiMessage>? LabelTemplate { get; set; }
+
+    /// <summary>Optional metadata. Omitted by default.</summary>
+    [Parameter] public RenderFragment<BitAiMessage>? MetadataTemplate { get; set; }
+
+    /// <summary>Replaces rendering of every part; omit to keep streaming Markdown, registered components and approvals.</summary>
+    [Parameter] public RenderFragment<BitAiMessagePartContext>? PartTemplate { get; set; }
+
+    /// <summary>Public Bit text/Markdown CSS parts.</summary>
+    [Parameter] public BitAiTextPartViewClassStyles? TextClasses { get; set; } = DefaultTextClasses;
+
+    /// <summary>Public Bit text/Markdown style parts.</summary>
+    [Parameter] public BitAiTextPartViewClassStyles? TextStyles { get; set; }
+
+    /// <summary>Public Bit tool/approval CSS parts.</summary>
+    [Parameter] public BitAiToolCallViewClassStyles? ToolClasses { get; set; } = DefaultToolClasses;
+
+    /// <summary>Public Bit tool/approval style parts.</summary>
+    [Parameter] public BitAiToolCallViewClassStyles? ToolStyles { get; set; }
+
+    /// <summary>Additional root classes.</summary>
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Root inline styles.</summary>
+    [Parameter] public string? Style { get; set; }
+
+    /// <summary>Additional root HTML attributes.</summary>
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? Attributes { get; set; }
+
+    private static BitAiTextPartViewClassStyles DefaultTextClasses => new()
+    {
+        Root = "chatstage-text",
+        Markdown = new()
+        {
+            Root = "chatstage-markdown",
+            Markdown = new()
+            {
+                Root = "chatstage-prose", Paragraph = "chatstage-paragraph", Heading = "chatstage-heading",
+                Caret = "chatstage-caret", List = "chatstage-list", ListItem = "chatstage-list-item",
+                Link = "chatstage-link", InlineCode = "chatstage-inline-code"
+            }
+        }
+    };
+
+    private static BitAiToolCallViewClassStyles DefaultToolClasses => new()
+    {
+        Root = "chatstage-tool-card", Header = "chatstage-tool-header", Body = "chatstage-tool-body",
+        Approval = new() { Root = "chatstage-approval" }
+    };
+}

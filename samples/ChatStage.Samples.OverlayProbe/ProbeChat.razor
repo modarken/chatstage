@@ -1,0 +1,21 @@
+@inject ProbeState State
+@if (State.Before)
+{
+    <LegacyChat @ref="_legacy" Conversation="State.Conversation" />
+}
+else
+{
+    <MeasuredChat @ref="_chat" Conversation="State.Conversation" Title="Overlay probe" />
+}
+@code {
+    private ChatStageChat? _chat;
+    private LegacyChat? _legacy;
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            State.Ready.TrySetResult(_chat?.Session ?? _legacy!.Session!);
+        }
+        return Task.CompletedTask;
+    }
+}

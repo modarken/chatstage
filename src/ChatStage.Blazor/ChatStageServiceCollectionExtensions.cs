@@ -32,6 +32,7 @@ public static class ChatStageServiceCollectionExtensions
 
         services.AddOptions<ChatStageOptions>()
             .Configure(configure)
+            .Validate(o => o.RenderInterval is not { } interval || interval >= TimeSpan.Zero, $"{nameof(ChatStageOptions)}.{nameof(ChatStageOptions.RenderInterval)} must not be negative.")
             .Validate(o => o.Endpoint is { IsAbsoluteUri: true }, $"{nameof(ChatStageOptions)}.{nameof(ChatStageOptions.Endpoint)} must be an absolute URI.")
             .ValidateOnStart();
 
@@ -39,13 +40,13 @@ public static class ChatStageServiceCollectionExtensions
         var httpClient = services.AddHttpClient(HttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
 
         services.AddBitBlazorUIServices();
+        services.AddScoped(sp => new AgUiTransport(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName),
+            sp.GetRequiredService<IOptions<ChatStageOptions>>(), components,
+            sp.GetRequiredService<ILogger<AgUiTransport>>()));
         services.AddBitBlazorUIAIServices(ai =>
         {
-            ai.UseTransport(sp => new AgUiTransport(
-                sp.GetRequiredService<IHttpClientFactory>().CreateClient(HttpClientName),
-                sp.GetRequiredService<IOptions<ChatStageOptions>>(),
-                components,
-                sp.GetRequiredService<ILogger<AgUiTransport>>()));
+            ai.UseTransport(sp => sp.GetRequiredService<AgUiTransport>());
 
             // The agent runs its tools on the server, and a click on a card is queued rather than interrupting a reply.
             ai.ConfigureSessions(o => o with { ExecuteTools = false, InterruptOnSubmit = false });

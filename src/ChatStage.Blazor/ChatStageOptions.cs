@@ -3,6 +3,41 @@ namespace ChatStage;
 /// <summary>Options for the ChatStage chat: where the agent is and what the UI should know about it.</summary>
 public sealed class ChatStageOptions
 {
+    /// <summary>
+    /// Bit.BlazorUI.AI's presentation and security options for the chat (image policy, timestamps, message actions,
+    /// Enter behavior, strings...). <see langword="null"/> (the default) keeps Bit's registered defaults.
+    /// </summary>
+    /// <remarks>
+    /// Used by <c>ChatStageChat</c>, <c>ChatStageSession</c> and <c>ChatStageTranscript</c> unless a component is handed
+    /// its own <c>UiOptions</c>. For example, images from your own host only, others behind a click:
+    /// <c>o.UiOptions = BitAiUiOptions.Default with { Images = BitAiImagePolicy.AllowListedHosts("app.example.com") }</c>.
+    /// </remarks>
+    public Bit.BlazorUI.BitAiUiOptions? UiOptions { get; set; }
+
+    /// <summary>
+    /// The minimum time between renders while a reply streams, for the chat's layout and Bit's views. Overrides
+    /// <see cref="Bit.BlazorUI.BitAiUiOptions.RenderInterval"/>; <see langword="null"/> (the default) keeps that one (50 ms).
+    /// </summary>
+    public TimeSpan? RenderInterval { get; set; }
+
+    /// <summary>
+    /// Maps an AG-UI <c>CUSTOM</c> event to the final Markdown of the reply being streamed, or returns
+    /// <see langword="null"/> to leave the text alone. The returned text replaces the reply's prose; tool cards, approvals
+    /// and reasoning are kept.
+    /// </summary>
+    /// <remarks>
+    /// Send the event after the last text delta and before <c>RUN_FINISHED</c>. Applied by <c>ChatStageChat</c> and
+    /// <c>ChatStageSession</c>, in any layout.
+    /// </remarks>
+    public Func<Bit.BlazorUI.BitAiCustomEvent, string?>? FinalText { get; set; }
+
+    /// <summary>The UI options in force: <see cref="UiOptions"/> (or Bit's registered ones) with <see cref="RenderInterval"/>.</summary>
+    internal Bit.BlazorUI.BitAiUiOptions ResolveUi(Bit.BlazorUI.BitAiUiOptions? registered)
+    {
+        var ui = UiOptions ?? registered ?? Bit.BlazorUI.BitAiUiOptions.Default;
+        return RenderInterval is { } interval && interval != ui.RenderInterval ? ui with { RenderInterval = interval } : ui;
+    }
+
     /// <summary>The agent's AG-UI endpoint, for example <c>https://localhost:5001/agent</c>. Required.</summary>
     public Uri? Endpoint { get; set; }
 

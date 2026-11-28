@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/samples/">
     <Project Path="samples/ChatStage.Samples.AgentServer/ChatStage.Samples.AgentServer.csproj" />
+    <Project Path="samples/ChatStage.Samples.OverlayProbe/ChatStage.Samples.OverlayProbe.csproj" />
     <Project Path="samples/ChatStage.Samples.Wpf/ChatStage.Samples.Wpf.csproj" />
   </Folder>
   <Folder Name="/src/">

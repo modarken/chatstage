@@ -1,0 +1,107 @@
+@namespace ChatStage
+@implements IAsyncDisposable
+@inject BitAiChatSessionFactory SessionFactory
+@inject ChatStageComponentRegistry Components
+@inject IOptions<ChatStageOptions> Options
+@inject BitAiUiOptions RegisteredUi
+
+@if (Context is { } context)
+{
+    <CascadingValue Value="context">
+        <BitAiOptionsProvider UiOptions="_ui">@ChildContent?.Invoke(context)</BitAiOptionsProvider>
+    </CascadingValue>
+}
+
+@code {
+    private BitAiConversation? _parameter;
+    private BitAiConversation? _attached;
+    private ChatStageRenderSubscription? _renders;
+    private BitAiUiOptions _ui = BitAiUiOptions.Default;
+
+    /// <summary>
+    /// The conversation to show; its id is the AG-UI thread id. Hydrate it (history, title) before handing it over. A
+    /// different instance switches threads: the old session is stopped and disposed. When not set, a new conversation is
+    /// started.
+    /// </summary>
+    [Parameter] public BitAiConversation? Conversation { get; set; }
+
+    /// <summary>Receives the new conversation started by <see cref="NewConversationAsync"/>, for <c>@bind-Conversation</c>.</summary>
+    [Parameter] public EventCallback<BitAiConversation> ConversationChanged { get; set; }
+
+    /// <summary>The entire layout, handed the session's context. This component renders no element of its own.</summary>
+    [Parameter] public RenderFragment<ChatStageSessionContext>? ChildContent { get; set; }
+
+    /// <summary>The current context: the conversation, the session, actions, busy state and the composer hooks.</summary>
+    public ChatStageSessionContext? Context { get; private set; }
+
+    /// <summary>The current session.</summary>
+    public BitAiChatSession? Session => Context?.Session;
+
+    /// <summary>The current actions: send a message, or show an app component, from code around the layout.</summary>
+    public ChatStageActions Actions => ChatStageActions.For(Session, Components);
+
+    /// <summary>Whether a submission or reply is in progress.</summary>
+    public bool IsBusy => Context?.IsBusy ?? false;
+
+    /// <summary>Stops the current reply.</summary>
+    public void Stop() => Context?.Stop();
+
+    /// <summary>Focuses the composer that registered itself with the context.</summary>
+    public ValueTask FocusInputAsync() => Context?.FocusInputAsync() ?? ValueTask.CompletedTask;
+
+    /// <summary>Starts a new thread: stops and disposes the current session and raises <see cref="ConversationChanged"/>.</summary>
+    public async Task NewConversationAsync()
+    {
+        var conversation = new BitAiConversation(Guid.NewGuid().ToString("N"));
+        await AttachAsync(conversation);
+        await ConversationChanged.InvokeAsync(conversation);
+        StateHasChanged();
+    }
+
+    /// <inheritdoc/>
+    protected override async Task OnParametersSetAsync()
+    {
+        // Only a new parameter value switches threads, so a parent that does not bind keeps a thread started here.
+        if (_attached is null || !ReferenceEquals(_parameter, Conversation))
+        {
+            _parameter = Conversation;
+            await AttachAsync(Conversation ?? _attached ?? new(Guid.NewGuid().ToString("N")));
+        }
+    }
+
+    private async Task AttachAsync(BitAiConversation conversation)
+    {
+        if (ReferenceEquals(_attached, conversation))
+        {
+            return;
+        }
+
+        await DetachAsync();
+        var session = SessionFactory.Create(conversation, SessionFactory.Defaults);
+        ChatStageActions.For(session, Components); // so ShowAsync checks and serializes with the app's registrations
+        Context = new(session, Options.Value);
+        _ui = Options.Value.ResolveUi(RegisteredUi);
+        _renders = new(Context, _ui.RenderInterval, () => InvokeAsync(StateHasChanged));
+        _attached = conversation;
+    }
+
+    private async ValueTask DetachAsync()
+    {
+        if (Context is { } context)
+        {
+            Context = null;
+            _attached = null;
+            if (_renders is not null)
+            {
+                await _renders.DisposeAsync();
+                _renders = null;
+            }
+
+            context.Dispose();
+            await context.Session.DisposeAsync();
+        }
+    }
+
+    /// <inheritdoc/>
+    public ValueTask DisposeAsync() => DetachAsync();
+}

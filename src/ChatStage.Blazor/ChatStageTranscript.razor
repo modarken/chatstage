@@ -1,0 +1,77 @@
+@namespace ChatStage
+@inject IOptions<ChatStageOptions> Options
+@inject BitAiUiOptions RegisteredUi
+
+<BitAiOptionsProvider UiOptions="_ui">
+    <BitAiMessageList @key="Context.Session" @ref="_list" Conversation="Context.Conversation" Session="Context.Session"
+                      Classes="ListClasses" Styles="ListStyles" EmptyTemplate="EmptyTemplate" OnPinnedChange="PinnedChanged"
+                      Class="@($"chatstage-transcript {Class}")" Style="@Style" @attributes="Attributes">
+        <MessageTemplate Context="message">
+            @if (MessageTemplate is not null)
+            {
+                @MessageTemplate(message)
+            }
+            else
+            {
+                <ChatStageMessage Message="message" LabelTemplate="LabelTemplate" />
+            }
+        </MessageTemplate>
+    </BitAiMessageList>
+</BitAiOptionsProvider>
+
+@code {
+    private BitAiMessageList? _list;
+
+    /// <summary>The owning renderless session context.</summary>
+    [CascadingParameter] public ChatStageSessionContext Context { get; set; } = default!;
+
+    /// <summary>Replaces each message. The default is the chrome-free ChatStageMessage.</summary>
+    [Parameter] public RenderFragment<BitAiMessage>? MessageTemplate { get; set; }
+
+    /// <summary>An inline label for the default message template.</summary>
+    [Parameter] public RenderFragment<BitAiMessage>? LabelTemplate { get; set; }
+
+    /// <summary>Content before any messages exist.</summary>
+    [Parameter] public RenderFragment? EmptyTemplate { get; set; }
+
+    /// <summary>Bit's presentation options, in place of <see cref="ChatStageOptions.UiOptions"/>. With <c>AutoScroll</c> (the default) the transcript follows new content only while the reader is at the bottom.</summary>
+    [Parameter] public BitAiUiOptions? UiOptions { get; set; }
+
+    private BitAiUiOptions? _uiParameter;
+    private BitAiUiOptions? _ui;
+
+    /// <inheritdoc/>
+    protected override void OnParametersSet()
+    {
+        if (_ui is null || !ReferenceEquals(_uiParameter, UiOptions))
+        {
+            _uiParameter = UiOptions;
+            _ui = UiOptions ?? Options.Value.ResolveUi(RegisteredUi);
+        }
+    }
+
+    /// <summary>Notification when the reader moves to or away from the bottom.</summary>
+    [Parameter] public EventCallback<bool> PinnedChanged { get; set; }
+
+    /// <summary>Public Bit transcript classes.</summary>
+    [Parameter] public BitAiMessageListClassStyles? ListClasses { get; set; } = new() { Content = "chatstage-transcript-content" };
+
+    /// <summary>Public Bit transcript styles.</summary>
+    [Parameter] public BitAiMessageListClassStyles? ListStyles { get; set; }
+
+    /// <summary>Additional root classes.</summary>
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Root inline styles.</summary>
+    [Parameter] public string? Style { get; set; }
+
+    /// <summary>Additional root HTML attributes.</summary>
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? Attributes { get; set; }
+
+    /// <summary>Whether the transcript is following new content.</summary>
+    public bool IsAtBottom => _list?.IsPinned ?? true;
+
+    /// <summary>Explicitly scrolls to the latest message and resumes following.</summary>
+    /// <param name="smooth">Whether to animate the scroll.</param>
+    public Task ScrollToLatestAsync(bool smooth = true) => _list?.ScrollToLatestAsync(smooth) ?? Task.CompletedTask;
+}
