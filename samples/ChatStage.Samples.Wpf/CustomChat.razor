@@ -1,0 +1,21 @@
+@* A complete flat layout using only released public components; transport and approvals stay unchanged. *@
+<ChatStageSession @ref="_owner" @bind-Conversation="_conversation">
+    <ChildContent Context="chat">
+        <section class="chatstage-headless custom-chat" aria-label="Custom assistant">
+            <button type="button" @onclick="NewAsync">New conversation</button>
+            <ChatStageTranscript>
+                <EmptyTemplate><p>Ask the demo agent. Try “Delete the demo item” for a secure approval.</p></EmptyTemplate>
+                <LabelTemplate Context="message">[@(message.Role == BitAiRole.User ? "You" : "Assistant")]: </LabelTemplate>
+            </ChatStageTranscript>
+            @* This composer renders only Stop while busy. Replace it with any app-owned input;
+               bind chat.InputText and call chat.SubmitAsync(text, attachments, cancellationToken). *@
+            <ChatStageComposer Placeholder="Message the demo agent" SubmitOnEnter="true" />
+        </section>
+    </ChildContent>
+</ChatStageSession>
+
+@code {
+    private ChatStageSession? _owner;
+    private BitAiConversation _conversation = new(Guid.NewGuid().ToString("N"));
+    private Task NewAsync() => _owner?.NewConversationAsync() ?? Task.CompletedTask;
+}

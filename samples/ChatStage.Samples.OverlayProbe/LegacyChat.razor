@@ -1,0 +1,123 @@
+@namespace ChatStage.Samples.OverlayProbe
+@implements IAsyncDisposable
+@inject ProbeState Probe
+@inject BitAiChatSessionFactory SessionFactory
+@inject IOptions<ChatStageOptions> Options
+
+
+<div class="chatstage" data-testid="chatstage">
+    <header class="chatstage-header">
+        <span class="chatstage-title">@Title</span>
+        @HeaderContent
+        @if (ShowContextMeter)
+        {
+            <BitAiContextMeter Conversation="Conversation" Window="Options.Value.ContextWindow" data-testid="chatstage-context-meter" />
+        }
+        @if (ShowUsage && UsageText is { } usage)
+        {
+            <span class="chatstage-usage" data-testid="chatstage-usage">@usage</span>
+        }
+    </header>
+    <BitAiChat Conversation="Conversation"
+               Session="_session"
+               EmptyTitle="@EmptyTitle"
+               EmptyDescription="@EmptyDescription"
+               Suggestions="Suggestions"
+               Placeholder="@Placeholder" />
+</div>
+
+@code {
+    protected override Task OnAfterRenderAsync(bool firstRender) { Probe.RootRenders++; return Task.CompletedTask; }
+    private BitAiChatSession? _session;
+    private BitAiConversation? _subscribed;
+
+    /// <summary>The conversation to show. Its id is the AG-UI thread id. When not set, a new conversation is started.</summary>
+    [Parameter]
+    public BitAiConversation Conversation { get; set; } = new(Guid.NewGuid().ToString("N"));
+
+    /// <summary>The title in the header.</summary>
+    [Parameter]
+    public string? Title { get; set; }
+
+    /// <summary>Extra content for the header, after the title (for example a theme switch).</summary>
+    [Parameter]
+    public RenderFragment? HeaderContent { get; set; }
+
+    /// <summary>The title shown before the first message.</summary>
+    [Parameter]
+    public string? EmptyTitle { get; set; }
+
+    /// <summary>The text shown under <see cref="EmptyTitle"/> before the first message.</summary>
+    [Parameter]
+    public string? EmptyDescription { get; set; }
+
+    /// <summary>Prompts offered before the first message.</summary>
+    [Parameter]
+    public IReadOnlyList<string>? Suggestions { get; set; }
+
+    /// <summary>The composer's placeholder text.</summary>
+    [Parameter]
+    public string? Placeholder { get; set; }
+
+    /// <summary>Whether to show the context meter (it needs <see cref="ChatStageOptions.ContextWindow"/>). Default true.</summary>
+    [Parameter]
+    public bool ShowContextMeter { get; set; } = true;
+
+    /// <summary>Whether to show the last reply's token count. Default true.</summary>
+    [Parameter]
+    public bool ShowUsage { get; set; } = true;
+
+    /// <summary>The chat session, for code that drives the chat (approvals, sending). Set once the component has initialized.</summary>
+    public BitAiChatSession? Session => _session;
+
+    /// <summary>
+    /// The chat's <see cref="ChatStageActions"/>, for app code outside the chat: send a message, or show one of your
+    /// components in the transcript with <see cref="ChatStageActions.ShowAsync{TData}"/>. Read-only until initialized.
+    /// </summary>
+    public ChatStageActions Actions => ChatStageActions.For(_session);
+
+    private string? UsageText => Conversation.LastMessage?.Metadata?.Usage is { IsEmpty: false } u
+        ? $"{(u.InputTokens ?? 0) + (u.OutputTokens ?? 0):N0} tokens"
+        : null;
+
+    /// <inheritdoc/>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ReferenceEquals(_subscribed, Conversation))
+        {
+            return;
+        }
+
+        if (_subscribed is not null)
+        {
+            _subscribed.Changed -= OnConversationChanged;
+        }
+
+        if (_session is not null)
+        {
+            await _session.DisposeAsync();
+        }
+
+        _session = SessionFactory.Create(Conversation, SessionFactory.Defaults);
+        ChatStageActions.For(_session); // so ShowAsync checks and serializes with the app's registrations
+        Conversation.Changed += OnConversationChanged;
+        _subscribed = Conversation;
+    }
+
+    private void OnConversationChanged(BitAiConversation conversation) => _ = InvokeAsync(StateHasChanged);
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
+    {
+        if (_subscribed is not null)
+        {
+            _subscribed.Changed -= OnConversationChanged;
+        }
+
+        if (_session is not null)
+        {
+            await _session.DisposeAsync();
+        }
+    }
+}
+

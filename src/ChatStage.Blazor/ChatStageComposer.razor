@@ -1,0 +1,171 @@
+@namespace ChatStage
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div @attributes="Attributes" class="chatstage-composer @Class" style="@Style">
+    @if (Context.IsBusy)
+    {
+        <button type="button" class="chatstage-stop" @onclick="Context.Stop">@StopText</button>
+    }
+    else
+    {
+        <textarea @ref="_input" class="chatstage-input" value="@Context.InputText" @oninput="InputChangedAsync"
+                  placeholder="@Placeholder" aria-label="@InputLabel" @onfocus="Focused" @onblur="Blurred"></textarea>
+        <button type="button" class="chatstage-send" @onclick="SendAsync">@SendText</button>
+    }
+</div>
+
+@code {
+    private ElementReference _input;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _keyboard;
+    private DotNetObjectReference<ChatStageComposer>? _reference;
+    private ChatStageSessionContext? _attached;
+    private string? _lastInputText;
+
+    /// <summary>The owning context. Replace this entire component to own a slash-command popup or attachments.</summary>
+    [CascadingParameter] public ChatStageSessionContext Context { get; set; } = default!;
+
+    /// <summary>Two-way text binding; the context holds the actual draft.</summary>
+    [Parameter] public string? InputText { get; set; }
+
+    /// <summary>Raised on draft edits.</summary>
+    [Parameter] public EventCallback<string> InputTextChanged { get; set; }
+
+    /// <summary>Enter sends when true; Shift+Enter always inserts a newline. Default true.</summary>
+    [Parameter] public bool SubmitOnEnter { get; set; } = true;
+
+    /// <summary>Placeholder text.</summary>
+    [Parameter] public string? Placeholder { get; set; }
+
+    /// <summary>The accessible input label.</summary>
+    [Parameter] public string InputLabel { get; set; } = "Message";
+
+    /// <summary>The send button label.</summary>
+    [Parameter] public string SendText { get; set; } = "Send";
+
+    /// <summary>The stop button label.</summary>
+    [Parameter] public string StopText { get; set; } = "Stop";
+
+    /// <summary>Focus notification.</summary>
+    [Parameter] public EventCallback<FocusEventArgs> Focused { get; set; }
+
+    /// <summary>Blur notification.</summary>
+    [Parameter] public EventCallback<FocusEventArgs> Blurred { get; set; }
+
+    /// <summary>Additional root classes.</summary>
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Root inline styles.</summary>
+    [Parameter] public string? Style { get; set; }
+
+    /// <summary>Additional root HTML attributes.</summary>
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? Attributes { get; set; }
+
+    /// <inheritdoc/>
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_attached, Context))
+        {
+            if (_attached is not null)
+            {
+                _attached.FocusInput = null;
+                _attached.MessageSent -= OnSent;
+            }
+
+            _attached = Context;
+            Context.FocusInput = FocusInputAsync;
+            Context.MessageSent += OnSent;
+        }
+
+        if (InputText is not null && InputText != _lastInputText)
+        {
+            _lastInputText = InputText;
+            Context.InputText = InputText;
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+        if (_keyboard is not null)
+        {
+            await _keyboard.InvokeVoidAsync("dispose");
+            await _keyboard.DisposeAsync();
+            _keyboard = null;
+        }
+
+        if (!Context.IsBusy)
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/ChatStage.Blazor/chatstage.js");
+            _reference ??= DotNetObjectReference.Create(this);
+            _keyboard = await _module.InvokeAsync<IJSObjectReference>("keyboard", _input, _reference, SubmitOnEnter);
+        }
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit will recreate the keyboard after reconnecting.
+        }
+    }
+
+    private async Task InputChangedAsync(ChangeEventArgs args)
+    {
+        Context.InputText = args.Value?.ToString() ?? string.Empty;
+        await InputTextChanged.InvokeAsync(Context.InputText);
+    }
+
+    private void OnSent(ChatStageSubmission submission) => _ = InvokeAsync(async () =>
+    {
+        await InputTextChanged.InvokeAsync(Context.InputText);
+        StateHasChanged();
+    });
+
+    /// <summary>Submits the draft. Called by the documented keyboard module.</summary>
+    [JSInvokable]
+    public async Task SendAsync()
+    {
+        var send = Context.SubmitAsync();
+        await InputTextChanged.InvokeAsync(Context.InputText);
+        await send;
+    }
+
+    /// <summary>Signals Escape without cancelling a run; the app decides what Escape means.</summary>
+    [JSInvokable]
+    public void Escape() => Context.NotifyEscape();
+
+    /// <summary>Focuses the input when the composer is idle.</summary>
+    public ValueTask FocusInputAsync() => Context.IsBusy ? ValueTask.CompletedTask : _input.FocusAsync();
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
+    {
+        if (_attached is not null)
+        {
+            _attached.FocusInput = null;
+            _attached.MessageSent -= OnSent;
+        }
+
+        try
+        {
+            if (_keyboard is not null)
+            {
+                await _keyboard.InvokeVoidAsync("dispose");
+                await _keyboard.DisposeAsync();
+            }
+
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit has already released its browser resources.
+        }
+
+        _reference?.Dispose();
+    }
+}

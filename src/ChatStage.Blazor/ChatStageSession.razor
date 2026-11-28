@@ -1,0 +1,95 @@
+@namespace ChatStage
+@implements IAsyncDisposable
+@inject BitAiChatSessionFactory SessionFactory
+@inject ChatStageComponentRegistry Components
+@inject IOptions<ChatStageOptions> Options
+
+@if (Context is { } context)
+{
+    <CascadingValue Value="context">
+        @ChildContent?.Invoke(context)
+    </CascadingValue>
+}
+
+@code {
+    private BitAiConversation? _attached;
+    private ChatStageRenderSubscription? _renders;
+
+    /// <summary>The conversation to hydrate or switch. Changing its instance stops and disposes the old session.</summary>
+    [Parameter] public BitAiConversation Conversation { get; set; } = new(Guid.NewGuid().ToString("N"));
+
+    /// <summary>Receives a new conversation when NewConversationAsync is called.</summary>
+    [Parameter] public EventCallback<BitAiConversation> ConversationChanged { get; set; }
+
+    /// <summary>The entire layout. This component adds no DOM elements.</summary>
+    [Parameter] public RenderFragment<ChatStageSessionContext>? ChildContent { get; set; }
+
+    /// <summary>The current context, available after initialization.</summary>
+    public ChatStageSessionContext? Context { get; private set; }
+
+    /// <summary>Raised when session or conversation state changes, on the originating thread.</summary>
+    public event Action? Changed;
+
+    /// <summary>The current session.</summary>
+    public BitAiChatSession? Session => Context?.Session;
+
+    /// <summary>The current actions.</summary>
+    public ChatStageActions Actions => ChatStageActions.For(Session, Components);
+
+    /// <summary>Whether a submission or reply is active.</summary>
+    public bool IsBusy => Context?.IsBusy ?? false;
+
+    /// <summary>Stops the current reply.</summary>
+    public void Stop() => Context?.Stop();
+
+    /// <summary>Focuses the registered composer.</summary>
+    public ValueTask FocusInputAsync() => Context?.FocusInputAsync() ?? ValueTask.CompletedTask;
+
+    /// <summary>Starts a fresh thread and informs the parent binding.</summary>
+    public async Task NewConversationAsync()
+    {
+        Conversation = new(Guid.NewGuid().ToString("N"));
+        await AttachAsync();
+        await ConversationChanged.InvokeAsync(Conversation);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <inheritdoc/>
+    protected override Task OnParametersSetAsync() => AttachAsync();
+
+    private async Task AttachAsync()
+    {
+        if (ReferenceEquals(_attached, Conversation))
+        {
+            return;
+        }
+
+        await DetachAsync();
+        var session = SessionFactory.Create(Conversation, SessionFactory.Defaults);
+        ChatStageActions.For(session, Components);
+        Context = new(session, Options.Value);
+        Context.Changed += OnChanged;
+        _renders = new(Context, Options.Value.RenderInterval, () => InvokeAsync(StateHasChanged));
+        _attached = Conversation;
+    }
+
+    private void OnChanged()
+    {
+        Changed?.Invoke();
+    }
+
+    private async ValueTask DetachAsync()
+    {
+        if (Context is { } context)
+        {
+            Context = null;
+            context.Changed -= OnChanged;
+            if (_renders is not null) await _renders.DisposeAsync();
+            context.Dispose();
+            await context.Session.DisposeAsync();
+        }
+    }
+
+    /// <inheritdoc/>
+    public ValueTask DisposeAsync() => DetachAsync();
+}

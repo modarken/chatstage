@@ -1,0 +1,8 @@
+.custom-chat {
+    --chatstage-transcript-padding: 8px;
+    --chatstage-heading-size: 1.1em;
+    --chatstage-list-marker: square;
+    --chatstage-list-indent: 1.25em;
+    --chatstage-link-color: #7bbcff;
+    --chatstage-message-gap: .4rem;
+}

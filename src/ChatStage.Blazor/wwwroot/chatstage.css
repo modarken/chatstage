@@ -1,0 +1,58 @@
+/* Load after Bit's styles. These parts and variables are ChatStage's public styling contract. */
+.chatstage-headless { display:flex; flex-direction:column; min-height:0; height:100%; color:inherit; background:transparent; }
+.chatstage-transcript.bit-aimls { padding:var(--chatstage-transcript-padding, 0); background:transparent; scrollbar-color:var(--chatstage-scrollbar-thumb, auto) var(--chatstage-scrollbar-track, transparent); scrollbar-width:thin; }
+.chatstage-transcript .chatstage-transcript-content { max-width:none; width:100%; gap:var(--chatstage-message-gap, .5rem); }
+.chatstage-message { display:block; padding:var(--chatstage-message-padding, 0); background:var(--chatstage-message-background, transparent); }
+.chatstage-label { display:inline; font-weight:var(--chatstage-label-weight, 600); color:var(--chatstage-label-color, inherit); }
+.chatstage-body { display:inline; color:var(--chatstage-body-color, inherit); }
+.chatstage-body > .chatstage-text, .chatstage-text > .chatstage-markdown, .chatstage-markdown > .chatstage-prose { display:inline; }
+.chatstage-prose > .chatstage-paragraph:first-child { display:inline; }
+.chatstage-prose .chatstage-paragraph { margin:var(--chatstage-paragraph-margin, 0 0 .5em); line-height:var(--chatstage-line-height, 1.5); }
+.chatstage-prose .chatstage-heading { font-size:var(--chatstage-heading-size, 1.15em); margin:var(--chatstage-heading-margin, .6em 0 .3em); }
+.chatstage-prose h1.chatstage-heading { font-size:var(--chatstage-heading-1-size, var(--chatstage-heading-size, 1.5em)); }
+.chatstage-prose h2.chatstage-heading { font-size:var(--chatstage-heading-2-size, var(--chatstage-heading-size, 1.3em)); }
+.chatstage-prose h3.chatstage-heading { font-size:var(--chatstage-heading-3-size, var(--chatstage-heading-size, 1.15em)); }
+.chatstage-prose h4.chatstage-heading, .chatstage-prose h5.chatstage-heading, .chatstage-prose h6.chatstage-heading { font-size:var(--chatstage-heading-small-size, var(--chatstage-heading-size, 1em)); }
+.chatstage-prose ul { list-style-type:var(--chatstage-list-marker, disc); }
+.chatstage-prose :is(ul, ol) { padding-inline-start:var(--chatstage-list-indent, 1.5em); margin:var(--chatstage-list-margin, .4em 0); }
+.chatstage-prose pre { background:var(--chatstage-code-background, #171717); color:var(--chatstage-code-color, inherit); padding:var(--chatstage-code-padding, .6em); border-radius:var(--chatstage-code-radius, 0); }
+.chatstage-prose code { font-family:var(--chatstage-code-font, monospace); }
+.chatstage-prose a { color:var(--chatstage-link-color, #65aaff); }
+.chatstage-metadata { font-size:var(--chatstage-metadata-size, .8em); color:var(--chatstage-metadata-color, inherit); }
+.chatstage-headless ::selection, .chatstage-transcript ::selection { background:var(--chatstage-selection-background, #315c85); color:var(--chatstage-selection-color, white); }
+.chatstage-input { color:var(--chatstage-input-color, inherit); background:var(--chatstage-input-background, transparent); caret-color:var(--chatstage-input-caret, currentColor); font:inherit; }
+.chatstage-input::placeholder { color:var(--chatstage-placeholder-color, #888); }
+.chatstage-stop { color:var(--chatstage-stop-color, inherit); background:var(--chatstage-stop-background, transparent); }
+.chatstage-tool-card { background:var(--chatstage-tool-background, transparent); border-color:var(--chatstage-tool-border, currentColor); }
+.chatstage-approval { background:var(--chatstage-approval-background, transparent); color:var(--chatstage-approval-color, inherit); }
+.chatstage {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    background: var(--bit-clr-bg-pri);
+    color: var(--bit-clr-fg-pri);
+}
+
+.chatstage-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--bit-clr-brd-sec);
+}
+
+.chatstage-title {
+    flex: 1;
+    font-weight: 600;
+}
+
+.chatstage-usage {
+    font-size: 0.85em;
+    opacity: 0.75;
+}
+
+.chatstage > :last-child {
+    flex: 1;
+    min-height: 0;
+}

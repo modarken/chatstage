@@ -48,7 +48,7 @@ internal static class AgUiMapping
 
             if (message.Role.IsUser)
             {
-                list.Add(new AGUIUserMessage { Id = message.MessageId, Content = new AGUIContent(message.GetText()) });
+                list.Add(new AGUIUserMessage { Id = message.MessageId, Content = UserContent(message) });
                 continue;
             }
 
@@ -78,6 +78,34 @@ internal static class AgUiMapping
         }
 
         return list;
+    }
+
+    private static AGUIContent UserContent(IBitAiMessage message)
+    {
+        if (message.Attachments.Count == 0)
+        {
+            return new AGUIContent(message.GetText());
+        }
+
+        var parts = new List<AGUIInputContent> { new AGUITextInputContent { Text = message.GetText() } };
+        foreach (var attachment in message.Attachments)
+        {
+            AGUIInputContentSource source = attachment.Url is { Length: > 0 } url
+                ? new AGUIInputContentUrlSource { Value = url, MimeType = attachment.ContentType }
+                : attachment.Data is { } data
+                    ? new AGUIInputContentDataSource { Value = Convert.ToBase64String(data.Span), MimeType = attachment.ContentType ?? "application/octet-stream" }
+                    : throw new InvalidOperationException("Upload attachments or provide inline Data before submitting them to AG-UI.");
+            AGUIMediaInputContent part = attachment.Kind switch
+            {
+                BitAiAttachmentKind.Image => new AGUIImageInputContent { Source = source },
+                BitAiAttachmentKind.Audio => new AGUIAudioInputContent { Source = source },
+                BitAiAttachmentKind.Video => new AGUIVideoInputContent { Source = source },
+                _ => new AGUIDocumentInputContent { Source = source }
+            };
+            parts.Add(part);
+        }
+
+        return new AGUIContent(parts);
     }
 
     /// <summary>

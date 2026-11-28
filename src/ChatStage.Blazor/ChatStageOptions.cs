@@ -3,6 +3,15 @@ namespace ChatStage;
 /// <summary>Options for the ChatStage chat: where the agent is and what the UI should know about it.</summary>
 public sealed class ChatStageOptions
 {
+    /// <summary>Default Bit presentation and security options, including Markdown image policy.</summary>
+    public Bit.BlazorUI.BitAiUiOptions UiOptions { get; set; } = Bit.BlazorUI.BitAiUiOptions.Default;
+
+    /// <summary>Maps an app-named custom event to authoritative final Markdown, or null to leave text unchanged.</summary>
+    /// <remarks>Emit after the last text delta and before RUN_FINISHED. Applied by ChatStageChat and ChatStageSession.</remarks>
+    public Func<Bit.BlazorUI.BitAiCustomEvent, string?>? FinalText { get; set; }
+    /// <summary>Minimum interval between streaming layout renders. Uses Bit's scheduler; default 50 ms.</summary>
+    public TimeSpan RenderInterval { get; set; } = Bit.BlazorUI.BitAiRenderScheduler.DefaultInterval;
+
     /// <summary>The agent's AG-UI endpoint, for example <c>https://localhost:5001/agent</c>. Required.</summary>
     public Uri? Endpoint { get; set; }
 
